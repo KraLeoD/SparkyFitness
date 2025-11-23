@@ -126,6 +126,13 @@ export const getSyncStartDate = (duration) => {
 };
 
 // Read health records from HealthKit
+// Helper functions for compatibility with backgroundSyncService
+export const readStepRecords = async (startDate, endDate) => readHealthRecords('Steps', startDate, endDate);
+
+export const readActiveCaloriesRecords = async (startDate, endDate) => readHealthRecords('ActiveCaloriesBurned', startDate, endDate);
+
+export const readHeartRateRecords = async (startDate, endDate) => readHealthRecords('HeartRate', startDate, endDate);
+
 export const readHealthRecords = async (recordType, startDate, endDate) => {
   // If HealthKit is not available, return empty array
   if (!isHealthKitAvailable) {
