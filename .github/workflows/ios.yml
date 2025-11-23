@@ -32,6 +32,15 @@ jobs:
         cd SparkyFitnessMobile/ios
         pod install
 
+    - name: Clean build directory
+      run: |
+        cd SparkyFitnessMobile/ios
+        rm -rf build
+        xcodebuild -workspace SparkyFitnessMobile.xcworkspace \
+          -scheme SparkyFitnessMobile \
+          -configuration Release \
+          clean
+
     - name: Build iOS app (unsigned)
       run: |
         cd SparkyFitnessMobile/ios
