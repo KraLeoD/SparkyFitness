@@ -53,14 +53,40 @@ npx react-native run-ios
 
 ## HealthKit Configuration
 
-The app requires HealthKit to be enabled in Xcode:
-1. Open `SparkyFitnessMobile.xcworkspace`
-2. Select the SparkyFitnessMobile target
-3. Go to "Signing & Capabilities" tab
-4. Ensure "HealthKit" capability is added
-5. Verify `Info.plist` contains:
+**CRITICAL**: The app REQUIRES HealthKit capability to be enabled or it will crash on startup!
+
+### Adding HealthKit Capability in Xcode:
+
+1. Open `SparkyFitnessMobile.xcworkspace` (not .xcodeproj)
+2. Select the **SparkyFitnessMobile** target in the project navigator
+3. Go to the **"Signing & Capabilities"** tab
+4. Click the **"+ Capability"** button
+5. Search for and add **"HealthKit"**
+6. Save the project (⌘+S)
+
+This will:
+- Create/update the entitlements file
+- Add `com.apple.developer.healthkit` entitlement
+- Enable HealthKit framework linking
+
+### Verification:
+
+After adding the capability, verify:
+- ✅ `SparkyFitnessMobile.entitlements` file exists
+- ✅ File contains `com.apple.developer.healthkit` = `true`
+- ✅ `Info.plist` contains:
    - `NSHealthShareUsageDescription`
    - `NSHealthUpdateUsageDescription`
+
+### Why This Is Required:
+
+Without the HealthKit capability enabled, when the app tries to import `@kingstinct/react-native-healthkit`, iOS will deny access to the HealthKit framework, causing an immediate SIGABRT crash during JavaScript module initialization.
+
+The app will crash with errors like:
+```
+EXC_CRASH (SIGABRT)
+abort() called
+```
 
 ## CI/CD Pipeline Requirements
 
