@@ -804,6 +804,17 @@ const fetchWithingsData = async (startDate, endDate) => {
     }
   };
 
+  // Auto-open web dashboard on first app load
+  useEffect(() => {
+    const autoOpenDashboard = async () => {
+      // Small delay to ensure server config is loaded
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await openWebDashboard();
+    };
+    
+    autoOpenDashboard();
+  }, []); // Empty dependency array ensures this only runs once on mount
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
