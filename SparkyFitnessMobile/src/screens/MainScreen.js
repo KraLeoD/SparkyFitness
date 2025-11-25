@@ -23,6 +23,7 @@ import {
 import { syncHealthData as healthConnectSyncData } from '../services/healthConnectService';
 import { saveTimeRange, loadTimeRange } from '../services/storage'; // Import saveTimeRange and loadTimeRange
 import * as api from '../services/api'; // Keep api import for checkServerConnection
+import { getActiveServerConfig } from '../services/storage';
 import { addLog } from '../services/LogService';
 import { HEALTH_METRICS } from '../constants/HealthMetrics'; // Import HEALTH_METRICS
 
@@ -647,7 +648,7 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
 
 const fetchWithingsData = async (startDate, endDate) => {
   try {
-    const activeConfig = await api.getActiveServerConfig();
+    const activeConfig = await getActiveServerConfig();
     if (!activeConfig || !activeConfig.url || !activeConfig.apiKey) {
       addLog('[MainScreen] No active server config found for Withings data.', 'warn');
       setWithingsDisplayData({});
@@ -737,9 +738,9 @@ const fetchWithingsData = async (startDate, endDate) => {
 
   const openWebDashboard = async () => {
     try {
-      const serverUrl = await loadStringPreference('serverUrl');
-      
-      if (!serverUrl) {
+      const activeConfig = await getActiveServerConfig();
+
+      if (!activeConfig || !activeConfig.url) {
         Alert.alert(
           'No Server Configured',
           'Please configure your server URL in Settings first.',
@@ -751,6 +752,7 @@ const fetchWithingsData = async (startDate, endDate) => {
         return;
       }
 
+      const serverUrl = activeConfig.url.endsWith('/') ? activeConfig.url.slice(0, -1) : activeConfig.url;
       addLog(`Opening web dashboard at: ${serverUrl}`);
       
       // Try to open with InAppBrowser (Custom Tabs on Android)
