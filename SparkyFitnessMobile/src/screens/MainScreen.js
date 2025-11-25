@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
-import { View, Text, Button, StyleSheet, Switch, Alert, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { View, Text, Button, StyleSheet, Switch, Alert, TouchableOpacity, Image, ScrollView, Linking } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native'; // Import useFocusEffect
 import axios from 'axios'; // Import axios for API calls
+import CustomTabs from 'react-native-custom-tabs';
 import {
   initHealthConnect,
   readStepRecords,
@@ -734,6 +735,50 @@ const fetchWithingsData = async (startDate, endDate) => {
     }
   };
 
+  const openWebDashboard = async () => {
+    try {
+      const serverUrl = await loadStringPreference('serverUrl');
+      
+      if (!serverUrl) {
+        Alert.alert(
+          'No Server Configured',
+          'Please configure your server URL in Settings first.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+          ]
+        );
+        return;
+      }
+
+      addLog(`Opening web dashboard at: ${serverUrl}`);
+      
+      // Try to open with Custom Tabs
+      try {
+        await CustomTabs.openURL(serverUrl, {
+          toolbarColor: '#007bff',
+          showPageTitle: true,
+          enableDefaultShare: true,
+          enableUrlBarHiding: true,
+          animations: {
+            startEnter: 'slide_in_right',
+            startExit: 'slide_out_left',
+            endEnter: 'slide_in_left',
+            endExit: 'slide_out_right'
+          }
+        });
+        addLog('Web dashboard opened successfully', 'info', 'SUCCESS');
+      } catch (customTabError) {
+        // Fallback to default browser if Custom Tabs not available
+        addLog('Custom Tabs not available, using default browser', 'warn', 'WARNING');
+        await Linking.openURL(serverUrl);
+      }
+    } catch (error) {
+      addLog(`Error opening web dashboard: ${error.message}`, 'error', 'ERROR');
+      Alert.alert('Error', `Could not open web dashboard: ${error.message}`);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
@@ -800,6 +845,12 @@ const fetchWithingsData = async (startDate, endDate) => {
           <Text style={styles.syncButtonSubText}>Sync your health data to the server</Text>
         </TouchableOpacity>
 
+        {/* Open Web Dashboard Button */}
+        <TouchableOpacity style={styles.webButtonContainer} onPress={openWebDashboard}>
+          <Text style={styles.webButtonIcon}>🌐</Text>
+          <Text style={styles.webButtonText}>Open Web Dashboard</Text>
+          <Text style={styles.webButtonSubText}>View your full fitness dashboard</Text>
+        </TouchableOpacity>
 
         {/* Connected to server status */}
         {isConnected && (
@@ -921,6 +972,28 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   syncButtonSubText: {
+    color: '#fff',
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  webButtonContainer: {
+    backgroundColor: '#28a745',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  webButtonIcon: {
+    fontSize: 32,
+    marginBottom: 4,
+  },
+  webButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  webButtonSubText: {
     color: '#fff',
     fontSize: 14,
     opacity: 0.8,
