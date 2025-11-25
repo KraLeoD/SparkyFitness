@@ -4,7 +4,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native'; // Import useFocusEffect
 import axios from 'axios'; // Import axios for API calls
-import CustomTabs from 'react-native-custom-tabs';
+import InAppBrowser from 'react-native-inappbrowser-reborn';
 import {
   initHealthConnect,
   readStepRecords,
@@ -753,24 +753,47 @@ const fetchWithingsData = async (startDate, endDate) => {
 
       addLog(`Opening web dashboard at: ${serverUrl}`);
       
-      // Try to open with Custom Tabs
+      // Try to open with InAppBrowser (Custom Tabs on Android)
       try {
-        await CustomTabs.openURL(serverUrl, {
-          toolbarColor: '#007bff',
-          showPageTitle: true,
-          enableDefaultShare: true,
-          enableUrlBarHiding: true,
-          animations: {
-            startEnter: 'slide_in_right',
-            startExit: 'slide_out_left',
-            endEnter: 'slide_in_left',
-            endExit: 'slide_out_right'
-          }
-        });
-        addLog('Web dashboard opened successfully', 'info', 'SUCCESS');
-      } catch (customTabError) {
-        // Fallback to default browser if Custom Tabs not available
-        addLog('Custom Tabs not available, using default browser', 'warn', 'WARNING');
+        if (await InAppBrowser.isAvailable()) {
+          await InAppBrowser.open(serverUrl, {
+            // iOS Properties
+            dismissButtonStyle: 'close',
+            preferredBarTintColor: '#007bff',
+            preferredControlTintColor: 'white',
+            readerMode: false,
+            animated: true,
+            modalPresentationStyle: 'fullScreen',
+            modalTransitionStyle: 'coverVertical',
+            modalEnabled: true,
+            enableBarCollapsing: false,
+            // Android Properties
+            showTitle: true,
+            toolbarColor: '#007bff',
+            secondaryToolbarColor: 'black',
+            navigationBarColor: 'black',
+            navigationBarDividerColor: 'white',
+            enableUrlBarHiding: true,
+            enableDefaultShare: true,
+            forceCloseOnRedirection: false,
+            // Specify full animation resource identifier(package:anim/name)
+            // or only resource name(in case of animation bundled with app).
+            animations: {
+              startEnter: 'slide_in_right',
+              startExit: 'slide_out_left',
+              endEnter: 'slide_in_left',
+              endExit: 'slide_out_right'
+            }
+          });
+          addLog('Web dashboard opened successfully', 'info', 'SUCCESS');
+        } else {
+          // Fallback to default browser if InAppBrowser not available
+          addLog('InAppBrowser not available, using default browser', 'warn', 'WARNING');
+          await Linking.openURL(serverUrl);
+        }
+      } catch (inAppError) {
+        // Fallback to default browser on error
+        addLog(`InAppBrowser error: ${inAppError.message}, using default browser`, 'warn', 'WARNING');
         await Linking.openURL(serverUrl);
       }
     } catch (error) {
