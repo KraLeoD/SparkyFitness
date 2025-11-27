@@ -11,11 +11,13 @@ import ServerConfig from '../components/ServerConfig';
 import HealthDataSync from '../components/HealthDataSync';
 import SyncFrequency from '../components/SyncFrequency';
 import AppearanceSettings from '../components/AppearanceSettings';
+import { useTheme } from '../contexts/ThemeContext';
 //import axios from 'axios'; // Import axios for API calls
 //import { getActiveServerConfig } from '../services/storage'; // Import to get server URL
 
 const SettingsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { theme: appTheme, setTheme: setAppTheme } = useTheme();
   const [url, setUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
 
@@ -31,7 +33,6 @@ const SettingsScreen = ({ navigation }) => {
   const [serverConfigs, setServerConfigs] = useState([]);
   const [activeConfigId, setActiveConfigId] = useState(null);
   const [currentConfigId, setCurrentConfigId] = useState(null); // For editing existing config
-  const [appTheme, setAppTheme] = useState('System'); // Default to System
   const [isConnected, setIsConnected] = useState(false); // State for server connection status
 
   const loadConfig = async () => {
@@ -84,9 +85,7 @@ const SettingsScreen = ({ navigation }) => {
     // Initialize Health Connect
     await initHealthConnect();
 
-    // Load theme preference
-    const theme = await loadStringPreference('appTheme');
-    setAppTheme(theme !== null ? theme : 'System');
+    // Theme is now managed by ThemeContext
 
     // Check server connection status
     const connectionStatus = await checkServerConnection();
@@ -99,8 +98,7 @@ const SettingsScreen = ({ navigation }) => {
   }, [activeConfigId]); // Re-check connection when active config changes
 
   const handleThemeChange = async (itemValue) => {
-    setAppTheme(itemValue);
-    await saveStringPreference('appTheme', itemValue);
+    await setAppTheme(itemValue);
   };
 
   const handleSaveConfig = async () => {
