@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useCallback and useRef
 import { View, Text, Button, StyleSheet, Switch, Alert, TouchableOpacity, Image, ScrollView, Linking } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ import { HEALTH_METRICS } from '../constants/HealthMetrics'; // Import HEALTH_ME
 
 const MainScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const isFirstMount = useRef(true); // Track if this is the first mount of the app
   const [healthMetricStates, setHealthMetricStates] = useState({}); // State to hold enabled status for all metrics
   const [healthData, setHealthData] = useState({}); // State to hold fetched data for all metrics
   const [syncDuration, setSyncDuration] = useState(1); // This will be replaced by selectedTimeRange
@@ -739,12 +740,15 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
     }
   };
 
-  // Auto-open web dashboard on first app load
+  // Auto-open web dashboard on first app load only
   useEffect(() => {
     const autoOpenDashboard = async () => {
-      // Small delay to ensure server config is loaded
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await openWebDashboard();
+      if (isFirstMount.current) {
+        // Small delay to ensure server config is loaded
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await openWebDashboard();
+        isFirstMount.current = false; // Mark that we've done the first auto-open
+      }
     };
     
     autoOpenDashboard();
