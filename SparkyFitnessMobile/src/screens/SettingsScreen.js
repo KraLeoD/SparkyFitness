@@ -265,8 +265,6 @@ const SettingsScreen = ({ navigation }) => {
             handleAddNewConfig={handleAddNewConfig}
             isConnected={isConnected}
             checkServerConnection={checkServerConnection}
-            colors={colors}
-            isDarkMode={isDarkMode}
           />
 
           <HealthDataSync
@@ -274,8 +272,6 @@ const SettingsScreen = ({ navigation }) => {
             handleToggleHealthMetric={handleToggleHealthMetric}
             isAllMetricsEnabled={isAllMetricsEnabled}
             handleToggleAllMetrics={handleToggleAllMetrics}
-            colors={colors}
-            isDarkMode={isDarkMode}
           />
 
           <SyncFrequency
@@ -285,21 +281,17 @@ const SettingsScreen = ({ navigation }) => {
             handleFourHourSyncTimeChange={handleFourHourSyncTimeChange}
             dailySyncTime={dailySyncTime}
             handleDailySyncTimeChange={handleDailySyncTimeChange}
-            colors={colors}
-            isDarkMode={isDarkMode}
           />
 
           <AppearanceSettings
             appTheme={appTheme}
             handleThemeChange={handleThemeChange}
-            colors={colors}
-            isDarkMode={isDarkMode}
           />
         </View>
       </ScrollView>
 
       {/* Bottom Navigation Bar */}
-      <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom, backgroundColor: colors.navBar, borderTopColor: colors.navBarBorder }]}>
+      <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom, backgroundColor: colors.navBar }]}>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Main')}>
           <Image source={require('../../assets/icons/home.png')} style={styles.navBarIcon} />
           <Text style={styles.navBarText}>Home</Text>
