@@ -774,6 +774,20 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
           </View>
         </View>
 
+        {/* Open Web Dashboard Button */}
+        <TouchableOpacity style={styles.webButtonContainer} onPress={openWebDashboard}>
+          <Text style={styles.webButtonIcon}>🌐</Text>
+          <Text style={styles.webButtonText}>Open Web Dashboard</Text>
+          <Text style={styles.webButtonSubText}>View your full fitness dashboard</Text>
+        </TouchableOpacity>
+
+        {/* Sync Now Button */}
+        <TouchableOpacity style={styles.syncButtonContainer} onPress={handleSync} disabled={isSyncing || !isHealthConnectInitialized}>
+          <Image source={require('../../assets/icons/sync_now.png')} style={styles.metricIcon} />
+          <Text style={styles.syncButtonText}>{isSyncing ? "Syncing..." : "Sync Now"}</Text>
+          <Text style={styles.syncButtonSubText}>Sync your health data to the server</Text>
+        </TouchableOpacity>
+
         {/* Health Overview */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Health Overview</Text>
@@ -789,20 +803,6 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
             ))}
           </View>
         </View>
-
-        {/* Sync Now Button */}
-        <TouchableOpacity style={styles.syncButtonContainer} onPress={handleSync} disabled={isSyncing || !isHealthConnectInitialized}>
-          <Image source={require('../../assets/icons/sync_now.png')} style={styles.metricIcon} />
-          <Text style={styles.syncButtonText}>{isSyncing ? "Syncing..." : "Sync Now"}</Text>
-          <Text style={styles.syncButtonSubText}>Sync your health data to the server</Text>
-        </TouchableOpacity>
-
-        {/* Open Web Dashboard Button */}
-        <TouchableOpacity style={styles.webButtonContainer} onPress={openWebDashboard}>
-          <Text style={styles.webButtonIcon}>🌐</Text>
-          <Text style={styles.webButtonText}>Open Web Dashboard</Text>
-          <Text style={styles.webButtonSubText}>View your full fitness dashboard</Text>
-        </TouchableOpacity>
 
         {/* Connected to server status */}
         {isConnected && (
