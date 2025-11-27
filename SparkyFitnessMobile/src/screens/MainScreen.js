@@ -31,7 +31,7 @@ const MainScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [healthMetricStates, setHealthMetricStates] = useState({}); // State to hold enabled status for all metrics
   const [healthData, setHealthData] = useState({}); // State to hold fetched data for all metrics
-//  const [withingsDisplayData, setWithingsDisplayData] = useState({}); // State to hold fetched Withings data
+  const [withingsDisplayData, setWithingsDisplayData] = useState({}); // State to hold fetched Withings data
   const [syncDuration, setSyncDuration] = useState(1); // This will be replaced by selectedTimeRange
   const [isSyncing, setIsSyncing] = useState(false);
   const [isHealthConnectInitialized, setIsHealthConnectInitialized] = useState(false);
@@ -637,16 +637,16 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
   setHealthData(newHealthData);
 
   // Fetch Withings data from backend
-//  await fetchWithingsData(startDate, endDate);
+  await fetchWithingsData(startDate, endDate);
   
   // Re-check server connection status after fetching health data
   const connectionStatus = await checkServerConnection();
   setIsConnected(connectionStatus);
   console.log(`[MainScreen] Displaying Health Connect data:`, newHealthData);
-//  console.log(`[MainScreen] Displaying Withings data:`, withingsDisplayData);
+  console.log(`[MainScreen] Displaying Withings data:`, withingsDisplayData);
 };
 
-/*const fetchWithingsData = async (startDate, endDate) => {
+const fetchWithingsData = async (startDate, endDate) => {
   try {
     const activeConfig = await getActiveServerConfig();
     if (!activeConfig || !activeConfig.url || !activeConfig.apiKey) {
@@ -855,24 +855,24 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
           </View>
         </View>
 
-//        {/* Withings Data Overview */}
-//        {Object.keys(withingsDisplayData).length > 0 && (
-//          <View style={styles.card}>
-//            <Text style={styles.sectionTitle}>Withings Data</Text>
-//            <View style={styles.healthMetricsContainer}>
-//              {Object.entries(withingsDisplayData).map(([key, value]) => (
-//                <View style={styles.metricItem} key={key}>
-//                  {/* You might want to map specific icons based on key */}
-//                  <Image source={require('../../assets/icons/SparkyFitness.png')} style={styles.metricIcon} />
-//                  <View>
-//                    <Text style={styles.metricValue}>{value}</Text>
-//                    <Text style={styles.metricLabel}>{key.replace('withings', '')}</Text>
-//                  </View>
-//                </View>
-//              ))}
-//            </View>
-//          </View>
-//        )} 
+        {/* Withings Data Overview */}
+        {Object.keys(withingsDisplayData).length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Withings Data</Text>
+            <View style={styles.healthMetricsContainer}>
+              {Object.entries(withingsDisplayData).map(([key, value]) => (
+                <View style={styles.metricItem} key={key}>
+                  {/* You might want to map specific icons based on key */}
+                  <Image source={require('../../assets/icons/SparkyFitness.png')} style={styles.metricIcon} />
+                  <View>
+                    <Text style={styles.metricValue}>{value}</Text>
+                    <Text style={styles.metricLabel}>{key.replace('withings', '')}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Sync Now Button */}
         <TouchableOpacity style={styles.syncButtonContainer} onPress={handleSync} disabled={isSyncing || !isHealthConnectInitialized}>

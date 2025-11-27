@@ -34,12 +34,15 @@ const SettingsScreen = ({ navigation }) => {
   const [appTheme, setAppTheme] = useState('System'); // Default to System
   const [isConnected, setIsConnected] = useState(false); // State for server connection status
 
+<<<<<<< HEAD
   // Withings specific states
   /*
   const [withingsConnected, setWithingsConnected] = useState(false);
   const [withingsLastSync, setWithingsLastSync] = useState('Never');
   const [withingsSyncFrequency, setWithingsSyncFrequency] = useState('manual'); // 'hourly', 'daily', 'manual'
   */
+=======
+>>>>>>> 9d16248 (Removed Withings)
   const loadConfig = async () => {
     const allConfigs = await getAllServerConfigs();
     setServerConfigs(allConfigs);
@@ -98,9 +101,12 @@ const SettingsScreen = ({ navigation }) => {
     const connectionStatus = await checkServerConnection();
     addLog(`[SettingsScreen] Server connection status: ${connectionStatus}`);
     setIsConnected(connectionStatus);
+<<<<<<< HEAD
 
     // Load Withings status
 //    await loadWithingsStatus();
+=======
+>>>>>>> 9d16248 (Removed Withings)
   };
 
   useEffect(() => {
@@ -277,6 +283,7 @@ const SettingsScreen = ({ navigation }) => {
             isConnected={isConnected}
             checkServerConnection={checkServerConnection}
           />
+<<<<<<< HEAD
 /*
           //{ Withings Integration Section }
           <View style={styles.sectionContainer}>
@@ -320,6 +327,9 @@ const SettingsScreen = ({ navigation }) => {
             )}
           </View>
   */
+=======
+
+>>>>>>> 9d16248 (Removed Withings)
           <HealthDataSync
             healthMetricStates={healthMetricStates}
             handleToggleHealthMetric={handleToggleHealthMetric}
@@ -365,6 +375,7 @@ const SettingsScreen = ({ navigation }) => {
   );
 };
 
+<<<<<<< HEAD
 /*
 const loadWithingsStatus = async () => {
     try {
@@ -473,4 +484,6 @@ const loadWithingsStatus = async () => {
     }
   };
 */
+=======
+>>>>>>> 9d16248 (Removed Withings)
 export default SettingsScreen;
