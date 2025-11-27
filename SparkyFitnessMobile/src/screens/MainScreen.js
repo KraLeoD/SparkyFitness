@@ -676,6 +676,8 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
       const activeConfig = await getActiveServerConfig();
 
       if (!activeConfig || !activeConfig.url) {
+        const errorMsg = 'No server configured. Please configure your server URL in Settings first.';
+        addLog(`[MainScreen] ${errorMsg}`, 'warn', 'WARNING');
         Alert.alert(
           'No Server Configured',
           'Please configure your server URL in Settings first.',
@@ -684,7 +686,7 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
             { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
           ]
         );
-        return;
+        throw new Error(errorMsg); // Throw error so auto-open knows it failed
       }
 
       const serverUrl = activeConfig.url.endsWith('/') ? activeConfig.url.slice(0, -1) : activeConfig.url;
@@ -749,9 +751,16 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
         addLog('[MainScreen] First app launch - auto-opening web dashboard');
         // Small delay to ensure server config is loaded
         await new Promise(resolve => setTimeout(resolve, 1000));
-        await openWebDashboard();
-        // Mark that we've done the first auto-open (persists across component re-mounts)
-        await saveStringPreference('hasAutoOpenedDashboard', 'true');
+        
+        try {
+          await openWebDashboard();
+          // Only mark as opened if successful (no error thrown)
+          await saveStringPreference('hasAutoOpenedDashboard', 'true');
+          addLog('[MainScreen] Web dashboard auto-open successful');
+        } catch (error) {
+          // Don't set the flag if opening failed - try again next time
+          addLog(`[MainScreen] Failed to auto-open dashboard: ${error.message}`, 'error', 'ERROR');
+        }
       } else {
         addLog('[MainScreen] Already auto-opened dashboard in this session - skipping');
       }

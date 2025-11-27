@@ -2,12 +2,12 @@ import React, { useEffect } from 'react';
 import { StatusBar, StyleSheet, useColorScheme } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import MainScreen from './src/screens/MainScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LogScreen from './src/screens/LogScreen';
 import { configureBackgroundSync } from './src/services/backgroundSyncService';
-import { saveStringPreference } from './src/services/healthConnectService';
 
 const Stack = createStackNavigator();
 
@@ -17,7 +17,8 @@ function App() {
   useEffect(() => {
     // Reset the auto-open flag on every app start
     const initializeApp = async () => {
-      await saveStringPreference('hasAutoOpenedDashboard', null);
+      // Remove the flag so the dashboard will auto-open on first MainScreen visit
+      await AsyncStorage.removeItem('@HealthConnect:hasAutoOpenedDashboard');
       await configureBackgroundSync();
     };
     
