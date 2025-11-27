@@ -7,6 +7,7 @@ import MainScreen from './src/screens/MainScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LogScreen from './src/screens/LogScreen';
 import { configureBackgroundSync } from './src/services/backgroundSyncService';
+import { saveStringPreference } from './src/services/healthConnectService';
 
 const Stack = createStackNavigator();
 
@@ -14,7 +15,13 @@ function App() {
   const isDarkMode = useColorScheme() === 'dark';
 
   useEffect(() => {
-    configureBackgroundSync();
+    // Reset the auto-open flag on every app start
+    const initializeApp = async () => {
+      await saveStringPreference('hasAutoOpenedDashboard', '');
+      await configureBackgroundSync();
+    };
+    
+    initializeApp();
   }, []);
 
   return (

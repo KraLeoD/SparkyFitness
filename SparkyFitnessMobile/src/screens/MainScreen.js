@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useCallback and useRef
+import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
 import { View, Text, Button, StyleSheet, Switch, Alert, TouchableOpacity, Image, ScrollView, Linking } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +29,6 @@ import { HEALTH_METRICS } from '../constants/HealthMetrics'; // Import HEALTH_ME
 
 const MainScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const isFirstMount = useRef(true); // Track if this is the first mount of the app
   const [healthMetricStates, setHealthMetricStates] = useState({}); // State to hold enabled status for all metrics
   const [healthData, setHealthData] = useState({}); // State to hold fetched data for all metrics
   const [syncDuration, setSyncDuration] = useState(1); // This will be replaced by selectedTimeRange
@@ -743,11 +742,18 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
   // Auto-open web dashboard on first app load only
   useEffect(() => {
     const autoOpenDashboard = async () => {
-      if (isFirstMount.current) {
+      // Check if we've already auto-opened the dashboard in this app session
+      const hasAutoOpened = await loadStringPreference('hasAutoOpenedDashboard');
+      
+      if (!hasAutoOpened) {
+        addLog('[MainScreen] First app launch - auto-opening web dashboard');
         // Small delay to ensure server config is loaded
         await new Promise(resolve => setTimeout(resolve, 1000));
         await openWebDashboard();
-        isFirstMount.current = false; // Mark that we've done the first auto-open
+        // Mark that we've done the first auto-open (persists across component re-mounts)
+        await saveStringPreference('hasAutoOpenedDashboard', 'true');
+      } else {
+        addLog('[MainScreen] Already auto-opened dashboard in this session - skipping');
       }
     };
     
