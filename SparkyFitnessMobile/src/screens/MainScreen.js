@@ -73,6 +73,33 @@ const MainScreen = ({ navigation }) => {
   useFocusEffect( // Use useFocusEffect to call initialize on focus
     useCallback(() => {
       initialize();
+      
+      // Auto-open web dashboard on first app load only
+      const autoOpenDashboard = async () => {
+        // Check if we've already auto-opened the dashboard in this app session
+        const hasAutoOpened = await loadStringPreference('hasAutoOpenedDashboard');
+        
+        if (hasAutoOpened !== 'true') {
+          addLog('[MainScreen] First app launch - auto-opening web dashboard');
+          // Small delay to ensure screen is fully focused and server config is loaded
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          try {
+            await openWebDashboard();
+            // Only mark as opened if successful (no error thrown)
+            await saveStringPreference('hasAutoOpenedDashboard', 'true');
+            addLog('[MainScreen] Web dashboard auto-open successful');
+          } catch (error) {
+            // Don't set the flag if opening failed - try again next time
+            addLog(`[MainScreen] Failed to auto-open dashboard: ${error.message}`, 'error', 'ERROR');
+          }
+        } else {
+          addLog('[MainScreen] Already auto-opened dashboard in this session - skipping');
+        }
+      };
+      
+      autoOpenDashboard();
+      
       return () => {
         // Optional: cleanup function when the screen loses focus
       };
@@ -740,34 +767,6 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
       Alert.alert('Error', `Could not open web dashboard: ${error.message}`);
     }
   };
-
-  // Auto-open web dashboard on first app load only
-  useEffect(() => {
-    const autoOpenDashboard = async () => {
-      // Check if we've already auto-opened the dashboard in this app session
-      const hasAutoOpened = await loadStringPreference('hasAutoOpenedDashboard');
-      
-      if (hasAutoOpened !== 'true') {
-        addLog('[MainScreen] First app launch - auto-opening web dashboard');
-        // Small delay to ensure server config is loaded
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        try {
-          await openWebDashboard();
-          // Only mark as opened if successful (no error thrown)
-          await saveStringPreference('hasAutoOpenedDashboard', 'true');
-          addLog('[MainScreen] Web dashboard auto-open successful');
-        } catch (error) {
-          // Don't set the flag if opening failed - try again next time
-          addLog(`[MainScreen] Failed to auto-open dashboard: ${error.message}`, 'error', 'ERROR');
-        }
-      } else {
-        addLog('[MainScreen] Already auto-opened dashboard in this session - skipping');
-      }
-    };
-    
-    autoOpenDashboard();
-  }, []); // Empty dependency array ensures this only runs once on mount
 
   return (
     <View style={styles.container}>
