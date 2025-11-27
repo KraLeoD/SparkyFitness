@@ -11,7 +11,7 @@ import ServerConfig from '../components/ServerConfig';
 import HealthDataSync from '../components/HealthDataSync';
 import SyncFrequency from '../components/SyncFrequency';
 import AppearanceSettings from '../components/AppearanceSettings';
-import axios from 'axios'; // Import axios for API calls
+//import axios from 'axios'; // Import axios for API calls
 //import { getActiveServerConfig } from '../services/storage'; // Import to get server URL
 
 const SettingsScreen = ({ navigation }) => {
@@ -35,10 +35,11 @@ const SettingsScreen = ({ navigation }) => {
   const [isConnected, setIsConnected] = useState(false); // State for server connection status
 
   // Withings specific states
+  /*
   const [withingsConnected, setWithingsConnected] = useState(false);
   const [withingsLastSync, setWithingsLastSync] = useState('Never');
   const [withingsSyncFrequency, setWithingsSyncFrequency] = useState('manual'); // 'hourly', 'daily', 'manual'
-
+  */
   const loadConfig = async () => {
     const allConfigs = await getAllServerConfigs();
     setServerConfigs(allConfigs);
@@ -99,7 +100,7 @@ const SettingsScreen = ({ navigation }) => {
     setIsConnected(connectionStatus);
 
     // Load Withings status
-    await loadWithingsStatus();
+//    await loadWithingsStatus();
   };
 
   useEffect(() => {
@@ -276,8 +277,8 @@ const SettingsScreen = ({ navigation }) => {
             isConnected={isConnected}
             checkServerConnection={checkServerConnection}
           />
-
-          {/* Withings Integration Section */}
+/*
+          //{ Withings Integration Section }
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>Withings Integration</Text>
             <View style={styles.settingItem}>
@@ -318,7 +319,7 @@ const SettingsScreen = ({ navigation }) => {
               </TouchableOpacity>
             )}
           </View>
-
+  */
           <HealthDataSync
             healthMetricStates={healthMetricStates}
             handleToggleHealthMetric={handleToggleHealthMetric}
@@ -364,7 +365,7 @@ const SettingsScreen = ({ navigation }) => {
   );
 };
 
-
+/*
 const loadWithingsStatus = async () => {
     try {
       const activeConfig = await getActiveServerConfig();
@@ -471,5 +472,5 @@ const loadWithingsStatus = async () => {
       Alert.alert('Error', `Failed to set sync frequency: ${error.message}`);
     }
   };
-
+*/
 export default SettingsScreen;
