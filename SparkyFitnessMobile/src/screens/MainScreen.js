@@ -804,7 +804,7 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
 
         {/* Sync Now Button */}
         <TouchableOpacity style={[styles.syncButtonContainer, { backgroundColor: colors.card }]} onPress={handleSync} disabled={isSyncing || !isHealthConnectInitialized}>
-          <Image source={require('../../assets/icons/sync_now.png')} style={[styles.metricIcon, { tintColor: colors.text }]} />
+          <Image source={require('../../assets/icons/sync_now.png')} style={styles.metricIcon} />
           <Text style={[styles.syncButtonText, { color: colors.text }]}>{isSyncing ? "Syncing..." : "Sync Now"}</Text>
           <Text style={[styles.syncButtonSubText, { color: colors.textSecondary }]}>Sync your health data to the server</Text>
         </TouchableOpacity>
@@ -815,7 +815,7 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
           <View style={styles.healthMetricsContainer}>
             {HEALTH_METRICS.map(metric => healthMetricStates[metric.stateKey] && (
               <View style={styles.metricItem} key={metric.id}>
-                <Image source={metric.icon} style={[styles.metricIcon, { tintColor: colors.text }]} />
+                <Image source={metric.icon} style={styles.metricIcon} />
                 <View>
                   <Text style={[styles.metricValue, { color: colors.text }]}>{healthData[metric.id] || '0'}</Text>
                   <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{metric.label}</Text>
@@ -843,16 +843,16 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
       {/* Bottom Navigation Bar */}
       <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom, backgroundColor: colors.navBar, borderTopColor: colors.navBarBorder }]}>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Main')}>
-          <Image source={require('../../assets/icons/home.png')} style={[styles.navBarIcon, styles.navBarIconActive, { tintColor: colors.primary }]} />
-          <Text style={[styles.navBarText, styles.navBarTextActive, { color: colors.primary }]}>Home</Text>
+          <Image source={require('../../assets/icons/home.png')} style={[styles.navBarIcon, styles.navBarIconActive]} />
+          <Text style={[styles.navBarText, styles.navBarTextActive]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Settings')}>
-          <Image source={require('../../assets/icons/settings.png')} style={[styles.navBarIcon, { tintColor: colors.textMuted }]} />
-          <Text style={[styles.navBarText, { color: colors.textMuted }]}>Settings</Text>
+          <Image source={require('../../assets/icons/settings.png')} style={styles.navBarIcon} />
+          <Text style={styles.navBarText}>Settings</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Logs')}>
-          <Image source={require('../../assets/icons/logs.png')} style={[styles.navBarIcon, { tintColor: colors.textMuted }]} />
-          <Text style={[styles.navBarText, { color: colors.textMuted }]}>Logs</Text>
+          <Image source={require('../../assets/icons/logs.png')} style={styles.navBarIcon} />
+          <Text style={styles.navBarText}>Logs</Text>
         </TouchableOpacity>
       </View>
     </View>

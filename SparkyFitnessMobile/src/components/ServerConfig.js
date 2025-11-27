@@ -28,7 +28,7 @@ const ServerConfig = ({ url, setUrl, apiKey, setApiKey, handleSaveConfig, server
               keyboardType="url"
             />
             <TouchableOpacity style={styles.iconButton} onPress={async () => setUrl(await Clipboard.getStringAsync())}>
-              <Image source={require('../../assets/icons/paste.png')} style={[styles.icon, { tintColor: textColor }]} />
+              <Image source={require('../../assets/icons/paste.png')} style={styles.icon} />
             </TouchableOpacity>
           </View>
         </View>
@@ -44,7 +44,7 @@ const ServerConfig = ({ url, setUrl, apiKey, setApiKey, handleSaveConfig, server
               secureTextEntry
             />
             <TouchableOpacity style={styles.iconButton} onPress={async () => setApiKey(await Clipboard.getStringAsync())}>
-              <Image source={require('../../assets/icons/paste.png')} style={[styles.icon, { tintColor: textColor }]} />
+              <Image source={require('../../assets/icons/paste.png')} style={styles.icon} />
             </TouchableOpacity>
           </View>
         </View>

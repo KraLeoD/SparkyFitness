@@ -22,7 +22,7 @@ const HealthDataSync = ({ healthMetricStates, handleToggleHealthMetric, isAllMet
       {HEALTH_METRICS.map((metric) => (
         <View key={metric.id} style={styles.settingItem}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Image source={metric.icon} style={[styles.icon, { tintColor: textColor }]} />
+            <Image source={metric.icon} style={styles.icon} />
             <Text style={[styles.settingLabel, { marginLeft: 8, color: textColor }]}>{metric.label}</Text>
           </View>
           <Switch

@@ -14,7 +14,7 @@ const AppearanceSettings = ({ appTheme, handleThemeChange, colors = {}, isDarkMo
       <Text style={[styles.sectionTitle, { color: textColor }]}>Appearance</Text>
       <View style={styles.settingItem}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Image source={require('../../assets/icons/settings.png')} style={[styles.icon, { tintColor: textColor }]} />
+          <Image source={require('../../assets/icons/settings.png')} style={styles.icon} />
           <Text style={[styles.settingLabel, { marginLeft: 8, color: textColor }]}>Theme</Text>
         </View>
         <Picker
