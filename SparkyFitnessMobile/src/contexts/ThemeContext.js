@@ -4,10 +4,55 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const THEME_KEY = '@HealthConnect:appTheme';
 
+// Theme color definitions
+export const lightColors = {
+  background: '#f0f2f5',
+  card: '#fff',
+  text: '#333',
+  textSecondary: '#555',
+  textMuted: '#777',
+  border: '#ddd',
+  primary: '#007bff',
+  navBar: '#fff',
+  navBarBorder: '#eee',
+  inputBackground: '#fff',
+  tagBackground: '#e0e0e0',
+};
+
+export const darkColors = {
+  background: '#121212',
+  card: '#1e1e1e',
+  text: '#e0e0e0',
+  textSecondary: '#b0b0b0',
+  textMuted: '#888',
+  border: '#333',
+  primary: '#4da6ff',
+  navBar: '#1e1e1e',
+  navBarBorder: '#333',
+  inputBackground: '#2c2c2c',
+  tagBackground: '#3a3a3a',
+};
+
+export const amoledColors = {
+  background: '#000000',
+  card: '#0a0a0a',
+  text: '#ffffff',
+  textSecondary: '#b0b0b0',
+  textMuted: '#888',
+  border: '#1a1a1a',
+  primary: '#4da6ff',
+  navBar: '#000000',
+  navBarBorder: '#1a1a1a',
+  inputBackground: '#0f0f0f',
+  tagBackground: '#1a1a1a',
+};
+
 const ThemeContext = createContext({
   theme: 'System',
   effectiveTheme: 'light',
   isDarkMode: false,
+  isAmoled: false,
+  colors: lightColors,
   setTheme: async () => {},
 });
 
@@ -51,12 +96,21 @@ export const ThemeProvider = ({ children }) => {
     return theme.toLowerCase();
   })();
 
-  const isDarkMode = effectiveTheme === 'dark';
+  const isDarkMode = effectiveTheme === 'dark' || effectiveTheme === 'amoled';
+  const isAmoled = effectiveTheme === 'amoled';
+  
+  const colors = (() => {
+    if (effectiveTheme === 'amoled') return amoledColors;
+    if (effectiveTheme === 'dark') return darkColors;
+    return lightColors;
+  })();
 
   const value = {
     theme,
     effectiveTheme,
     isDarkMode,
+    isAmoled,
+    colors,
     setTheme,
     isLoading,
   };

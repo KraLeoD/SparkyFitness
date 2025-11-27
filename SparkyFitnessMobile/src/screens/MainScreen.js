@@ -26,9 +26,11 @@ import * as api from '../services/api'; // Keep api import for checkServerConnec
 import { getActiveServerConfig } from '../services/storage';
 import { addLog } from '../services/LogService';
 import { HEALTH_METRICS } from '../constants/HealthMetrics'; // Import HEALTH_METRICS
+import { useTheme } from '../contexts/ThemeContext';
 
 const MainScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { colors, isDarkMode } = useTheme();
   const [healthMetricStates, setHealthMetricStates] = useState({}); // State to hold enabled status for all metrics
   const [healthData, setHealthData] = useState({}); // State to hold fetched data for all metrics
   const [syncDuration, setSyncDuration] = useState(1); // This will be replaced by selectedTimeRange
@@ -769,53 +771,54 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         {/* Time Range */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Time Range</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Time Range</Text>
           <View style={styles.timeRangeContainer}>
             <Picker
               selectedValue={selectedTimeRange}
-              style={styles.picker}
+              style={[styles.picker, { color: colors.text }]}
+              dropdownIconColor={colors.text}
               onValueChange={async (itemValue) => {
                 setSelectedTimeRange(itemValue);
                 await saveTimeRange(itemValue); // Save selectedTimeRange using the new function
                 addLog(`[MainScreen] Time range changed and saved: ${itemValue}`);
               }}
             >
-              <Picker.Item label="Last 24 Hours" value="24h" />
-              <Picker.Item label="Last 7 Days" value="7d" />
-              <Picker.Item label="Last 30 Days" value="30d" />
-              <Picker.Item label="Last 90 Days" value="90d" />
+              <Picker.Item label="Last 24 Hours" value="24h" color={isDarkMode ? '#e0e0e0' : '#333'} />
+              <Picker.Item label="Last 7 Days" value="7d" color={isDarkMode ? '#e0e0e0' : '#333'} />
+              <Picker.Item label="Last 30 Days" value="30d" color={isDarkMode ? '#e0e0e0' : '#333'} />
+              <Picker.Item label="Last 90 Days" value="90d" color={isDarkMode ? '#e0e0e0' : '#333'} />
             </Picker>
           </View>
         </View>
 
         {/* Open Web Dashboard Button */}
-        <TouchableOpacity style={styles.webButtonContainer} onPress={openWebDashboard}>
+        <TouchableOpacity style={[styles.webButtonContainer, { backgroundColor: colors.card }]} onPress={openWebDashboard}>
           <Text style={styles.webButtonIcon}>🌐</Text>
-          <Text style={styles.webButtonText}>Open Web Dashboard</Text>
-          <Text style={styles.webButtonSubText}>View your full fitness dashboard</Text>
+          <Text style={[styles.webButtonText, { color: colors.text }]}>Open Web Dashboard</Text>
+          <Text style={[styles.webButtonSubText, { color: colors.textSecondary }]}>View your full fitness dashboard</Text>
         </TouchableOpacity>
 
         {/* Sync Now Button */}
-        <TouchableOpacity style={styles.syncButtonContainer} onPress={handleSync} disabled={isSyncing || !isHealthConnectInitialized}>
-          <Image source={require('../../assets/icons/sync_now.png')} style={styles.metricIcon} />
-          <Text style={styles.syncButtonText}>{isSyncing ? "Syncing..." : "Sync Now"}</Text>
-          <Text style={styles.syncButtonSubText}>Sync your health data to the server</Text>
+        <TouchableOpacity style={[styles.syncButtonContainer, { backgroundColor: colors.card }]} onPress={handleSync} disabled={isSyncing || !isHealthConnectInitialized}>
+          <Image source={require('../../assets/icons/sync_now.png')} style={[styles.metricIcon, { tintColor: colors.text }]} />
+          <Text style={[styles.syncButtonText, { color: colors.text }]}>{isSyncing ? "Syncing..." : "Sync Now"}</Text>
+          <Text style={[styles.syncButtonSubText, { color: colors.textSecondary }]}>Sync your health data to the server</Text>
         </TouchableOpacity>
 
         {/* Health Overview */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Health Overview</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Health Overview</Text>
           <View style={styles.healthMetricsContainer}>
             {HEALTH_METRICS.map(metric => healthMetricStates[metric.stateKey] && (
               <View style={styles.metricItem} key={metric.id}>
-                <Image source={metric.icon} style={styles.metricIcon} />
+                <Image source={metric.icon} style={[styles.metricIcon, { tintColor: colors.text }]} />
                 <View>
-                  <Text style={styles.metricValue}>{healthData[metric.id] || '0'}</Text>
-                  <Text style={styles.metricLabel}>{metric.label}</Text>
+                  <Text style={[styles.metricValue, { color: colors.text }]}>{healthData[metric.id] || '0'}</Text>
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{metric.label}</Text>
                 </View>
               </View>
             ))}
@@ -838,18 +841,18 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
       </ScrollView>
 
       {/* Bottom Navigation Bar */}
-      <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom, backgroundColor: colors.navBar, borderTopColor: colors.navBarBorder }]}>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Main')}>
-          <Image source={require('../../assets/icons/home.png')} style={[styles.navBarIcon, styles.navBarIconActive]} />
-          <Text style={[styles.navBarText, styles.navBarTextActive]}>Home</Text>
+          <Image source={require('../../assets/icons/home.png')} style={[styles.navBarIcon, styles.navBarIconActive, { tintColor: colors.primary }]} />
+          <Text style={[styles.navBarText, styles.navBarTextActive, { color: colors.primary }]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Settings')}>
-          <Image source={require('../../assets/icons/settings.png')} style={styles.navBarIcon} />
-          <Text style={styles.navBarText}>Settings</Text>
+          <Image source={require('../../assets/icons/settings.png')} style={[styles.navBarIcon, { tintColor: colors.textMuted }]} />
+          <Text style={[styles.navBarText, { color: colors.textMuted }]}>Settings</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Logs')}>
-          <Image source={require('../../assets/icons/logs.png')} style={styles.navBarIcon} />
-          <Text style={styles.navBarText}>Logs</Text>
+          <Image source={require('../../assets/icons/logs.png')} style={[styles.navBarIcon, { tintColor: colors.textMuted }]} />
+          <Text style={[styles.navBarText, { color: colors.textMuted }]}>Logs</Text>
         </TouchableOpacity>
       </View>
     </View>

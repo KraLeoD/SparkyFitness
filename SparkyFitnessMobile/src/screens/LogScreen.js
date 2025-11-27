@@ -3,9 +3,11 @@ import { View, Text, FlatList, Button, StyleSheet, TouchableOpacity, Image, Aler
 import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLogs, clearLogs, getLogSummary, getLogLevel, setLogLevel } from '../services/LogService';
+import { useTheme } from '../contexts/ThemeContext';
 
 const LogScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { colors, isDarkMode } = useTheme();
   const [logs, setLogs] = useState([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -105,12 +107,12 @@ const LogScreen = ({ navigation }) => {
 
 
   return (
-  <View style={styles.container}>
+  <View style={[styles.container, { backgroundColor: colors.background }]}>
     <FlatList
       data={logs}
       renderItem={({ item }) => (
         <TouchableOpacity 
-          style={styles.logItem}
+          style={[styles.logItem, { backgroundColor: colors.card }]}
           onPress={() => handleCopyLogToClipboard(item)}
           activeOpacity={0.7}
         >
@@ -121,13 +123,13 @@ const LogScreen = ({ navigation }) => {
             <Text style={[styles.logStatus, { color: item.status === 'SUCCESS' ? '#28a745' : item.status === 'WARNING' ? '#ffc107' : '#dc3545' }]}>
               {item.status}
             </Text>
-            <Text style={styles.logMessage} ellipsizeMode="clip">{item.message}</Text>
+            <Text style={[styles.logMessage, { color: colors.textSecondary }]} ellipsizeMode="clip">{item.message}</Text>
             <View style={styles.logDetails}>
               {item.details && item.details.map((detail, index) => (
-                <Text key={index} style={styles.logDetailTag}>{detail}</Text>
+                <Text key={index} style={[styles.logDetailTag, { backgroundColor: colors.tagBackground, color: colors.text }]}>{detail}</Text>
               ))}
             </View>
-            <Text style={styles.logTimestamp}>{new Date(item.timestamp).toLocaleString()}</Text>
+            <Text style={[styles.logTimestamp, { color: colors.textMuted }]}>{new Date(item.timestamp).toLocaleString()}</Text>
           </View>
         </TouchableOpacity>
         )}
@@ -140,45 +142,46 @@ const LogScreen = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* Today's Summary */}
-            <View style={[styles.card, styles.summaryCard]}>
-              <Text style={styles.sectionTitle}>Today's Summary</Text>
+            <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Today's Summary</Text>
               <View style={styles.summaryContainer}>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryCount, { color: '#28a745' }]}>{logSummary.SUCCESS}</Text>
-                  <Text style={styles.summaryLabel}>Successful</Text>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Successful</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryCount, { color: '#ffc107' }]}>{logSummary.WARNING}</Text>
-                  <Text style={styles.summaryLabel}>Warnings</Text>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Warnings</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryCount, { color: '#dc3545' }]}>{logSummary.ERROR}</Text>
-                  <Text style={styles.summaryLabel}>Errors</Text>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Errors</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryCount, { color: '#007bff' }]}>{logSummary.info}</Text>
-                  <Text style={styles.summaryLabel}>Info</Text>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Info</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryCount, { color: '#800080' }]}>{logSummary.debug}</Text>
-                  <Text style={styles.summaryLabel}>Debug</Text>
+                  <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Debug</Text>
                 </View>
               </View>
             </View>
 
             {/* Log Level Settings */}
-            <View style={[styles.card, styles.logLevelCard]}>
-              <Text style={styles.sectionTitle}>Log Level</Text>
+            <View style={[styles.card, styles.logLevelCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Log Level</Text>
               <Picker
                 selectedValue={currentLogLevel}
-                style={styles.picker}
+                style={[styles.picker, { color: colors.text }]}
+                dropdownIconColor={colors.text}
                 onValueChange={handleLogLevelChange}
               >
-                <Picker.Item label="Silent" value="silent" />
-                <Picker.Item label="Error" value="error" />
-                <Picker.Item label="Warning" value="warn" />
-                <Picker.Item label="Info" value="info" />
-                <Picker.Item label="Debug" value="debug" />
+                <Picker.Item label="Silent" value="silent" color={isDarkMode ? '#e0e0e0' : '#333'} />
+                <Picker.Item label="Error" value="error" color={isDarkMode ? '#e0e0e0' : '#333'} />
+                <Picker.Item label="Warning" value="warn" color={isDarkMode ? '#e0e0e0' : '#333'} />
+                <Picker.Item label="Info" value="info" color={isDarkMode ? '#e0e0e0' : '#333'} />
+                <Picker.Item label="Debug" value="debug" color={isDarkMode ? '#e0e0e0' : '#333'} />
               </Picker>
             </View>
           </>
@@ -186,7 +189,7 @@ const LogScreen = ({ navigation }) => {
         ListFooterComponent={() => (
           <>
             {hasMore && (
-              <TouchableOpacity style={styles.loadMoreButton} onPress={handleLoadMore}>
+              <TouchableOpacity style={[styles.loadMoreButton, { backgroundColor: colors.primary }]} onPress={handleLoadMore}>
                 <Text style={styles.loadMoreButtonText}>Load more logs</Text>
               </TouchableOpacity>
             )}
@@ -196,18 +199,18 @@ const LogScreen = ({ navigation }) => {
       />
 
       {/* Bottom Navigation Bar */}
-      <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom, backgroundColor: colors.navBar, borderTopColor: colors.navBarBorder }]}>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Main')}>
-          <Image source={require('../../assets/icons/home.png')} style={styles.navBarIcon} />
-          <Text style={styles.navBarText}>Home</Text>
+          <Image source={require('../../assets/icons/home.png')} style={[styles.navBarIcon, { tintColor: colors.textMuted }]} />
+          <Text style={[styles.navBarText, { color: colors.textMuted }]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Settings')}>
-          <Image source={require('../../assets/icons/settings.png')} style={styles.navBarIcon} />
-          <Text style={styles.navBarText}>Settings</Text>
+          <Image source={require('../../assets/icons/settings.png')} style={[styles.navBarIcon, { tintColor: colors.textMuted }]} />
+          <Text style={[styles.navBarText, { color: colors.textMuted }]}>Settings</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBarItem} onPress={() => navigation.navigate('Logs')}>
-          <Image source={require('../../assets/icons/logs.png')} style={[styles.navBarIcon, styles.navBarIconActive]} />
-          <Text style={[styles.navBarText, styles.navBarTextActive]}>Logs</Text>
+          <Image source={require('../../assets/icons/logs.png')} style={[styles.navBarIcon, styles.navBarIconActive, { tintColor: colors.primary }]} />
+          <Text style={[styles.navBarText, styles.navBarTextActive, { color: colors.primary }]}>Logs</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -380,6 +383,11 @@ const styles = StyleSheet.create({
   logLevelCard: {
     paddingVertical: 10, // Reduced vertical padding
     marginBottom: 10, // Reduced margin bottom
+  },
+  picker: {
+    height: 50,
+    width: '100%',
+    color: '#333',
   },
 });
 
