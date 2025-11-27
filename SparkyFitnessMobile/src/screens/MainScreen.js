@@ -745,7 +745,7 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
       // Check if we've already auto-opened the dashboard in this app session
       const hasAutoOpened = await loadStringPreference('hasAutoOpenedDashboard');
       
-      if (!hasAutoOpened) {
+      if (hasAutoOpened !== 'true') {
         addLog('[MainScreen] First app launch - auto-opening web dashboard');
         // Small delay to ensure server config is loaded
         await new Promise(resolve => setTimeout(resolve, 1000));

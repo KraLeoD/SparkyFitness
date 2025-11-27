@@ -17,7 +17,7 @@ function App() {
   useEffect(() => {
     // Reset the auto-open flag on every app start
     const initializeApp = async () => {
-      await saveStringPreference('hasAutoOpenedDashboard', '');
+      await saveStringPreference('hasAutoOpenedDashboard', null);
       await configureBackgroundSync();
     };
     
