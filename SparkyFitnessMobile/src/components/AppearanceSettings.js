@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text, Image, Platform } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import styles from '../screens/SettingsScreenStyles';
 
@@ -16,7 +16,7 @@ const AppearanceSettings = ({ appTheme, setAppTheme }) => {
   return (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>Appearance</Text>
-      <View style={[styles.settingItem, { zIndex: 1000 }]}>
+      <View style={[styles.settingItem, { zIndex: 1000, ...(Platform.OS === 'android' && { elevation: 1000 }) }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Image source={require('../../assets/icons/settings.png')} style={styles.icon} />
           <Text style={[styles.settingLabel, { marginLeft: 8 }]}>Theme</Text>
@@ -30,6 +30,9 @@ const AppearanceSettings = ({ appTheme, setAppTheme }) => {
           listMode="SCROLLVIEW"
           containerStyle={{ flex: 1 }}
           placeholder="Select a theme"
+          dropDownDirection="AUTO"
+          style={Platform.OS === 'android' ? { elevation: 5 } : {}}
+          dropDownContainerStyle={Platform.OS === 'android' ? { elevation: 5 } : {}}
         />
       </View>
     </View>

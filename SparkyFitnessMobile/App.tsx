@@ -20,14 +20,16 @@ function AppContent() {
     const initializeApp = async () => {
       // Remove the flag so the dashboard will auto-open on first MainScreen visit
       await AsyncStorage.removeItem('@HealthConnect:hasAutoOpenedDashboard');
+
+      // Configure background sync during app initialization
+      try {
+        await configureBackgroundSync();
+      } catch (error) {
+        console.error('[App] Failed to configure background sync:', error);
+      }
     };
 
     initializeApp();
-
-    // Configure background sync without blocking app startup
-    configureBackgroundSync().catch(error => {
-      console.error('[App] Failed to configure background sync:', error);
-    });
   }, []);
 
   return (
