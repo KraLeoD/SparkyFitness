@@ -3,8 +3,13 @@
  */
 
 import { AppRegistry, Platform, LogBox } from 'react-native';
+
+console.log('[index.js] Starting app initialization, Platform:', Platform.OS);
+
 import App from './App';
 import { name as appName } from './app.json';
+
+console.log('[index.js] App imported successfully, appName:', appName);
 
 //LogBox.ignoreAllLogs(true);
 
@@ -17,4 +22,6 @@ if (__DEV__ && Platform.OS === 'ios') {
 	global.FORCE_HEALTHKIT_ON_SIM = false;
 }
 
+console.log('[index.js] Registering component:', appName);
 AppRegistry.registerComponent(appName, () => App);
+console.log('[index.js] Component registered successfully');
