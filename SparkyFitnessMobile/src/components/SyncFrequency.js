@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Platform } from 'react-native';
+import { View, Text } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import styles from '../screens/SettingsScreenStyles';
 import { saveSyncDuration, saveStringPreference } from '../services/healthConnectService';
@@ -47,7 +47,7 @@ const SyncFrequency = ({ syncDuration, setSyncDuration, fourHourSyncTime, setFou
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>Sync Frequency</Text>
 
-      <View style={[styles.inputGroup, { zIndex: 3000, ...(Platform.OS === 'android' && { elevation: 3000 }) }]}>
+      <View style={[styles.inputGroup, { zIndex: 3000 }]}>
         <Text style={styles.label}>Sync Interval</Text>
         <DropDownPicker
           open={syncDurationOpen}
@@ -59,15 +59,12 @@ const SyncFrequency = ({ syncDuration, setSyncDuration, fourHourSyncTime, setFou
           onSelectItem={(item) => saveSyncDuration(item.value)}
           listMode="SCROLLVIEW"
           placeholder="Select sync frequency"
-          dropDownDirection="AUTO"
-          style={Platform.OS === 'android' ? { elevation: 5 } : {}}
-          dropDownContainerStyle={Platform.OS === 'android' ? { elevation: 5 } : {}}
         />
         <Text style={styles.subLabel}>How often should your health data be synced automatically?</Text>
       </View>
 
       {syncDuration === '4h' && (
-        <View style={[styles.inputGroup, { zIndex: 2000, ...(Platform.OS === 'android' && { elevation: 2000 }) }]}>
+        <View style={[styles.inputGroup, { zIndex: 2000 }]}>
           <Text style={styles.label}>Prompt Time (Every 4 Hours)</Text>
           <DropDownPicker
             open={fourHourTimeOpen}
@@ -79,15 +76,12 @@ const SyncFrequency = ({ syncDuration, setSyncDuration, fourHourSyncTime, setFou
             onSelectItem={(item) => saveStringPreference('fourHourSyncTime', item.value)}
             listMode="SCROLLVIEW"
             placeholder="Select a time"
-            dropDownDirection="AUTO"
-            style={Platform.OS === 'android' ? { elevation: 5 } : {}}
-            dropDownContainerStyle={Platform.OS === 'android' ? { elevation: 5 } : {}}
           />
         </View>
       )}
 
       {syncDuration === '24h' && (
-        <View style={[styles.inputGroup, { zIndex: 1000, ...(Platform.OS === 'android' && { elevation: 1000 }) }]}>
+        <View style={[styles.inputGroup, { zIndex: 1000 }]}>
           <Text style={styles.label}>Prompt Time (Daily)</Text>
           <DropDownPicker
             open={dailyTimeOpen}
@@ -99,9 +93,6 @@ const SyncFrequency = ({ syncDuration, setSyncDuration, fourHourSyncTime, setFou
             onSelectItem={(item) => saveStringPreference('dailySyncTime', item.value)}
             listMode="SCROLLVIEW"
             placeholder="Select a time"
-            dropDownDirection="AUTO"
-            style={Platform.OS === 'android' ? { elevation: 5 } : {}}
-            dropDownContainerStyle={Platform.OS === 'android' ? { elevation: 5 } : {}}
           />
         </View>
       )}

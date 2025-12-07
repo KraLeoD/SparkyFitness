@@ -766,17 +766,16 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
               fetchHealthData(healthMetricStates, item.value);
             }}
             containerStyle={styles.dropdownContainer}
-            style={[styles.dropdownStyle, Platform.OS === 'android' && { elevation: 5 }]}
+            style={styles.dropdownStyle}
             itemStyle={styles.dropdownItemStyle}
             labelStyle={styles.dropdownLabelStyle}
-            dropDownContainerStyle={[styles.dropdownListContainerStyle, Platform.OS === 'android' && { elevation: 5 }]}
+            dropDownContainerStyle={styles.dropdownListContainerStyle}
             placeholderStyle={styles.dropdownPlaceholderStyle}
             selectedItemLabelStyle={styles.selectedItemLabelStyle}
             maxHeight={200}
             zIndex={3000} // Ensure dropdown is above other elements
             zIndexInverse={1000}
             listMode="SCROLLVIEW"
-            dropDownDirection="AUTO"
           />
         </View>
 
