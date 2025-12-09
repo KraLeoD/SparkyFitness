@@ -761,9 +761,12 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
             items={timeRangeOptions.map(option => ({ label: option.label, value: option.value }))}
             setOpen={setOpenTimeRangePicker}
             setValue={setSelectedTimeRange}
-            onSelectItem={async (item) => {
-              await saveTimeRange(item.value);
-              fetchHealthData(healthMetricStates, item.value);
+            onChangeValue={async (value) => {
+              if (value) {
+                addLog(`[MainScreen] Time range changed to: ${value}`);
+                await saveTimeRange(value);
+                fetchHealthData(healthMetricStates, value);
+              }
             }}
             containerStyle={styles.dropdownContainer}
             style={styles.dropdownStyle}

@@ -110,8 +110,9 @@ export const getSyncStartDate = (duration) => {
 
   switch (duration) {
     case '24h':
+      // For 24h, get exactly the last 24 hours without resetting to midnight
       startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      break;
+      return startDate; // Return immediately without setting hours to midnight
     case '3d':
       startDate.setDate(now.getDate() - 3);
       break;
@@ -126,8 +127,9 @@ export const getSyncStartDate = (duration) => {
       break;
     default:
       startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      break;
+      return startDate; // Return immediately for default case too
   }
+  // For multi-day ranges, reset to midnight to get complete days
   startDate.setHours(0, 0, 0, 0);
   return startDate;
 };
