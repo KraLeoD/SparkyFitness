@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useCallback and useRef
 import { View, Text, Button, StyleSheet, Switch, Alert, TouchableOpacity, Image, ScrollView, Linking, Platform } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker'; // Import DropDownPicker
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +39,7 @@ const MainScreen = ({ navigation }) => {
   const [openTimeRangePicker, setOpenTimeRangePicker] = useState(false); // New state for DropDownPicker visibility
   const [isConnected, setIsConnected] = useState(false); // State for server connection status
   const isAndroid = Platform.OS === 'android';
+  const lastTimeRangeRef = useRef(null); // Track last time range to prevent duplicate calls
 
   const timeRangeOptions = [
     { label: "Last 24 Hours", value: "24h" },
@@ -71,6 +72,7 @@ const MainScreen = ({ navigation }) => {
     const loadedTimeRange = await loadTimeRange();
     const initialTimeRange = loadedTimeRange !== null ? loadedTimeRange : '3d';
     setSelectedTimeRange(initialTimeRange); // Initialize with loaded preference or default
+    lastTimeRangeRef.current = initialTimeRange; // Initialize ref to prevent duplicate calls
     addLog(`[MainScreen] Loaded selectedTimeRange from storage: ${initialTimeRange}`); // Add this log
 
     // Fetch initial health data after setting the time range
@@ -762,7 +764,8 @@ const fetchHealthData = async (currentHealthMetricStates, timeRange) => {
             setOpen={setOpenTimeRangePicker}
             setValue={setSelectedTimeRange}
             onChangeValue={async (value) => {
-              if (value) {
+              if (value && value !== lastTimeRangeRef.current) {
+                lastTimeRangeRef.current = value;
                 addLog(`[MainScreen] Time range changed to: ${value}`);
                 await saveTimeRange(value);
                 fetchHealthData(healthMetricStates, value);
