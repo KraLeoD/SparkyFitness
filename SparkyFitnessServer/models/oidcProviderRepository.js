@@ -1,7 +1,7 @@
 const { getSystemClient } = require('../db/poolManager');
 const { encrypt, decrypt, ENCRYPTION_KEY } = require('../security/encryption');
 const { log } = require('../config/logging');
-const fetch = require('node-fetch'); // Import node-fetch
+const { fetch } = require('undici'); // Use undici's fetch (compatible with CommonJS)
 const NodeCache = require('node-cache'); // Import node-cache for caching discovery documents
 
 const discoveryCache = new NodeCache({ stdTTL: 3600 }); // Cache discovery documents for 1 hour
