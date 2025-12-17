@@ -145,13 +145,13 @@ export const requestHealthPermissions = async (permissionsToRequest) => {
     addLog(`[HealthKitService] Requesting authorization - Read: [${toRead.join(', ')}], Write: [${toShare.join(', ')}]`, 'info', 'INFO');
 
     const result = await requestAuthorization({ toRead, toWrite: toShare });
-    
+
     if (result) {
       addLog(`[HealthKitService] Authorization request completed successfully.`, 'info', 'SUCCESS');
     } else {
       addLog(`[HealthKitService] Authorization may not have been granted for all requested permissions.`, 'warn', 'WARNING');
     }
-    
+
     return true;
 
   } catch (error) {
@@ -171,22 +171,23 @@ export const getSyncStartDate = (duration) => {
 
   switch (duration) {
     case '24h':
-      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      startDate.setDate(now.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0);
       break;
     case '3d':
-      startDate.setDate(now.getDate() - 3);
+      startDate.setDate(now.getDate() - 2);
       startDate.setHours(0, 0, 0, 0);
       break;
     case '7d':
-      startDate.setDate(now.getDate() - 7);
+      startDate.setDate(now.getDate() - 6);
       startDate.setHours(0, 0, 0, 0);
       break;
     case '30d':
-      startDate.setDate(now.getDate() - 30);
+      startDate.setDate(now.getDate() - 29);
       startDate.setHours(0, 0, 0, 0);
       break;
     case '90d':
-      startDate.setDate(now.getDate() - 90);
+      startDate.setDate(now.getDate() - 89);
       startDate.setHours(0, 0, 0, 0);
       break;
     default:
@@ -203,8 +204,10 @@ export const readHealthRecords = async (recordType, startDate, endDate) => {
     return [];
   }
 
+  const queryLimit = 20000; // Define a reasonable limit for HealthKit queries
+
   try {
-    addLog(`[HealthKitService] Reading ${recordType} records from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    //addLog(`[HealthKitService] Reading ${recordType} records from ${startDate.toISOString()} to ${endDate.toISOString()} (requested range)`);
 
     const identifier = HEALTHKIT_TYPE_MAP[recordType];
     if (!identifier) {
@@ -214,8 +217,10 @@ export const readHealthRecords = async (recordType, startDate, endDate) => {
 
     // Handle special cases first
     if (recordType === 'SleepSession') {
-      const samples = await queryCategorySamples(identifier, { from: startDate, to: endDate });
-      addLog(`[HealthKitService] Read ${samples.length} Sleep records`);
+      console.log(`[HealthKitService DEBUG] Calling queryCategorySamples for SleepSession with from: ${startDate.toISOString()}, to: ${endDate.toISOString()} and limit: ${queryLimit}`);
+      const samples = await queryCategorySamples(identifier, { from: startDate, to: endDate, limit: queryLimit });
+      //addLog(`[HealthKitService] Raw samples (Sleep) returned by native query: Count = ${samples.length}, First 5: ${JSON.stringify(samples.slice(0, 5))}`);
+      //addLog(`[HealthKitService] Read ${samples.length} Sleep records`);
       return samples.map(s => ({
         startTime: s.startDate,
         endTime: s.endDate,
@@ -223,8 +228,12 @@ export const readHealthRecords = async (recordType, startDate, endDate) => {
     }
 
     if (recordType === 'BloodPressure') {
-      const systolicSamples = await queryQuantitySamples('HKQuantityTypeIdentifierBloodPressureSystolic', { from: startDate, to: endDate });
-      const diastolicSamples = await queryQuantitySamples('HKQuantityTypeIdentifierBloodPressureDiastolic', { from: startDate, to: endDate });
+      //console.log(`[HealthKitService DEBUG] Calling queryQuantitySamples for BloodPressureSystolic with from: ${startDate.toISOString()}, to: ${endDate.toISOString()} and limit: ${queryLimit}`);
+      const systolicSamples = await queryQuantitySamples('HKQuantityTypeIdentifierBloodPressureSystolic', { from: startDate, to: endDate, limit: queryLimit });
+      console.log(`[HealthKitService DEBUG] Calling queryQuantitySamples for BloodPressureDiastolic with from: ${startDate.toISOString()}, to: ${endDate.toISOString()} and limit: ${queryLimit}`);
+      const diastolicSamples = await queryQuantitySamples('HKQuantityTypeIdentifierBloodPressureDiastolic', { from: startDate, to: endDate, limit: queryLimit });
+      //addLog(`[HealthKitService] Raw systolic samples (BloodPressure) returned by native query: Count = ${systolicSamples.length}, First 5: ${JSON.stringify(systolicSamples.slice(0, 5))}`);
+      //addLog(`[HealthKitService] Raw diastolic samples (BloodPressure) returned by native query: Count = ${diastolicSamples.length}, First 5: ${JSON.stringify(diastolicSamples.slice(0, 5))}`);
 
       const bpMap = new Map();
       systolicSamples.forEach(s => bpMap.set(s.startDate, { systolic: s.quantity, time: s.startDate }));
@@ -240,7 +249,7 @@ export const readHealthRecords = async (recordType, startDate, endDate) => {
           diastolic: { inMillimetersOfMercury: r.diastolic },
           time: r.time,
         }));
-      
+
       addLog(`[HealthKitService] Read and combined ${results.length} BloodPressure records`);
       return results;
     }
@@ -250,16 +259,36 @@ export const readHealthRecords = async (recordType, startDate, endDate) => {
       addLog(`[HealthKitService] Unsupported quantity record type: ${recordType}`, 'warn', 'WARNING');
       return [];
     }
-    
-    const samples = await queryQuantitySamples(identifier, { from: startDate, to: endDate });
-    addLog(`[HealthKitService] Read ${samples.length} ${recordType} records, applying manual filter for iOS.`);
 
-    // Manual filtering for iOS as a workaround for potential library issues
-    const filteredSamples = samples.filter(record => {
+    console.log(`[HealthKitService DEBUG] Calling queryQuantitySamples for ${recordType} with from: ${startDate.toISOString()}, to: ${endDate.toISOString()} and limit: ${queryLimit}`);
+    const samples = await queryQuantitySamples(identifier, { from: startDate, to: endDate, limit: queryLimit });
+
+    // Defensive check: Ensure samples is an array before proceeding
+    if (!Array.isArray(samples)) {
+      addLog(`[HealthKitService] queryQuantitySamples for ${recordType} returned non-array data: ${JSON.stringify(samples)}. Expected an array.`, 'warn', 'WARNING');
+      return [];
+    }
+
+    // Log the raw samples to understand what's being returned
+    //addLog(`[HealthKitService] Raw samples for ${recordType}: ${JSON.stringify(samples)}`);
+    //addLog(`[HealthKitService] Read ${samples.length} ${recordType} records, applying manual filter for iOS.`);
+
+    // Manual filtering for iOS as a workaround for potential library issues where the native
+    // query may not respect the date range, returning all historical data.
+    const filteredSamples = samples.filter((record, index) => {
       const recordDate = new Date(record.startDate || record.time);
-      return recordDate >= startDate && recordDate <= endDate;
+      const isWithinRange = recordDate >= startDate && recordDate <= endDate;
+      if (index < 10 || !isWithinRange) { // Log first 10 records and any out-of-range records
+        //addLog(`[HealthKitService] Filter check for ${recordType} - Record Date: ${recordDate.toISOString()}, Start Date: ${startDate.toISOString()}, End Date: ${endDate.toISOString()}, Within Range: ${isWithinRange}`);
+      }
+      return isWithinRange;
     });
-    addLog(`[HealthKitService] Found ${filteredSamples.length} ${recordType} records after manual filtering for iOS.`);
+
+    if (samples.length > filteredSamples.length) {
+      addLog(`[HealthKitService] Manual filter was necessary. Raw count: ${samples.length}, Filtered count: ${filteredSamples.length} for ${recordType}.`, 'warn', 'WARNING');
+    } else {
+      addLog(`[HealthKitService] Found ${filteredSamples.length} ${recordType} records after manual filtering for iOS.`);
+    }
 
     // Transform samples to match expected format
     return filteredSamples.map(s => {
@@ -590,7 +619,29 @@ export const syncHealthData = async (syncDuration, healthMetricStates = {}) => {
       } else if (type === 'ActiveCaloriesBurned') {
         dataToTransform = aggregateActiveCaloriesByDate(rawRecords);
       } else if (type === 'TotalCaloriesBurned') {
-        dataToTransform = aggregateTotalCaloriesByDate(rawRecords);
+        // Special Handling for iOS: Total Calories = Active + Basal (BMR)
+        // HealthKit doesn't have a "Total" type, so we must manually fetch Active calories 
+        // and combine them with the Basal calories we already fetched (rawRecords for TotalCaloriesBurned maps to Basal).
+
+        try {
+          addLog(`[HealthKitService] Fetching Active Calories to add to Total Calories calculation...`);
+          const activeRecords = await readHealthRecords('ActiveCaloriesBurned', startDate, endDate);
+
+          if (activeRecords && activeRecords.length > 0) {
+            addLog(`[HealthKitService] Found ${activeRecords.length} Active Calories records to merge with ${rawRecords.length} BMR records`);
+            // Combine Basal (rawRecords) + Active (activeRecords)
+            // The aggregation function simply sums all energy records by date, so this effectively calculates (Basal + Active)
+            const combinedRecords = [...rawRecords, ...activeRecords];
+            dataToTransform = aggregateTotalCaloriesByDate(combinedRecords);
+          } else {
+            addLog(`[HealthKitService] No Active Calories found to merge. Total Calories will only be BMR.`);
+            dataToTransform = aggregateTotalCaloriesByDate(rawRecords);
+          }
+        } catch (err) {
+          addLog(`[HealthKitService] Error fetching extra active calories for total calc: ${err.message}`, 'warn', 'WARNING');
+          // Fallback to just BMR if active fails
+          dataToTransform = aggregateTotalCaloriesByDate(rawRecords);
+        }
       }
 
       const transformed = transformHealthRecords(dataToTransform, metricConfig);
