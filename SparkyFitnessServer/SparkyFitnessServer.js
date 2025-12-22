@@ -56,6 +56,7 @@ const waterContainerRoutes = require('./routes/waterContainerRoutes');
 const backupRoutes = require('./routes/backupRoutes'); // Import backup routes
 const errorHandler = require('./middleware/errorHandler'); // Import the new error handler
 const reviewRoutes = require('./routes/reviewRoutes');
+const tdeeRoutes = require('./routes/tdeeRoutes'); // Import TDEE routes
 const cron = require('node-cron'); // Import node-cron
 const { performBackup, applyRetentionPolicy } = require('./services/backupService'); // Import backup service
 const externalProviderRepository = require('./models/externalProviderRepository'); // Import externalProviderRepository
@@ -334,6 +335,7 @@ app.use('/workout-presets', require('./routes/workoutPresetRoutes')); // Add wor
 app.use('/workout-plan-templates', require('./routes/workoutPlanTemplateRoutes')); // Add workout plan template routes
 app.use('/review', reviewRoutes);
 app.use('/onboarding', onboardingRoutes); // Add onboarding routes
+app.use('/api/tdee', tdeeRoutes); // Add TDEE routes
 
 // Temporary debug route to log incoming requests for meal plan templates
 app.use(

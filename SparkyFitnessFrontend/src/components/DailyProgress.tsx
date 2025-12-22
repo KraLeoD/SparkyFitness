@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Target, Zap, Utensils, Flame, Flag } from "lucide-react"; // Added Utensils, Flame, Flag
+import AdaptiveTDEEDisplay from "@/components/AdaptiveTDEEDisplay";
 import {
   Tooltip,
   TooltipContent,
@@ -619,6 +620,11 @@ const DailyProgress = ({
               <span>{Math.round(calorieProgress)}%</span>
             </div>
             <Progress value={calorieProgress} className="h-2" />
+          </div>
+
+          {/* Adaptive TDEE Display */}
+          <div className="mt-4">
+            <AdaptiveTDEEDisplay selectedDate={selectedDate} userId={currentUserId} />
           </div>
         </div>
       </CardContent>
