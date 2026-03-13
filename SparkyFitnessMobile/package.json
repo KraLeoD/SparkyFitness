@@ -60,6 +60,7 @@
     "victory-native": "^41.20.2"
   },
   "devDependencies": {
+    "react-native-nitro-modules": "^0.30.0",
     "@babel/core": "^7.25.2",
     "@babel/runtime": "^7.25.0",
     "@expo/config-plugins": "^55.0.6",

@@ -8,20 +8,13 @@ import React, {
   useMemo,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authClient } from '../lib/auth-client';
-import { fetchIdentityUser, switchUserContext } from '@/api/Auth/auth';
+import {
+  REDIRECT_TRACKING_KEY,
+  SW_UNREGISTERED_KEY,
+  cancelScheduledRedirect,
+} from '@/services/api';
 
-export interface User {
-  id: string;
-  activeUserId: string;
-  email: string;
-  fullName: string | null;
-  role: string;
-  twoFactorEnabled: boolean;
-  mfaEmailEnabled: boolean;
-}
-
-interface ExtendedSessionUser {
+interface User {
   id: string;
   email: string;
   name: string | null;
@@ -66,77 +59,120 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   // 1. Sync Effect: Updates User state when Session changes or invalidates
   useEffect(() => {
-    // Log when session changes to identify refresh triggers
-    if (session !== prevSessionRef.current) {
-      prevSessionRef.current = session;
-    }
+    const checkSession = async () => {
+      try {
+        let userAuthenticated = false;
 
-    // Only process if session has actual user data AND it's different from what we have
-    if (session?.user && (!user || user.id !== session.user.id)) {
-      const extUser = session.user as unknown as ExtendedSessionUser;
-
-      const sessionUser: User = {
-        id: extUser.id,
-        activeUserId: extUser.activeUserId || extUser.id,
-        email: extUser.email,
-        fullName: extUser.name || null,
-        role: extUser.role || 'user',
-        twoFactorEnabled: !!extUser.twoFactorEnabled,
-        mfaEmailEnabled: !!extUser.mfaEmailEnabled,
-      };
-
-      //console.log('[Auth Hook] Setting user state from session:', sessionUser.id);
-      setUser(sessionUser);
-
-      // Fetch Authoritative Data (Active Context)
-      // This runs on every session update to ensure we are strictly in sync with the backend.
-      fetchIdentityUser()
-        .then((realUserData) => {
-          setUser((prev) => {
-            if (!prev) return prev;
-            if (
-              prev.activeUserId === realUserData.activeUserId &&
-              prev.fullName === realUserData.fullName
-            ) {
-              return prev; // No change
-            }
-            return {
-              ...prev,
-              activeUserId: realUserData.activeUserId,
-              fullName:
-                realUserData.activeUserFullName ||
-                realUserData.activeUserEmail ||
-                null,
-              email: realUserData.activeUserEmail,
-            };
+        // Attempt to check OIDC session first
+        try {
+          const oidcResponse = await fetch('/openid/api/me', {
+            credentials: 'include',
           });
-        })
-        .catch((err) =>
-          console.error(
-            '[Auth Hook] Failed to fetch authoritative user data:',
-            err
-          )
-        );
+          if (oidcResponse.ok) {
+            const userData = await oidcResponse.json();
+            if (userData && userData.userId && userData.email) {
+              const role = userData.role || 'user';
+              setUser({
+                id: userData.userId,
+                email: userData.email,
+                role: role,
+              });
+              userAuthenticated = true;
 
-      setIsSyncing(false);
-    } else if (session?.user && user && user.id === session.user.id) {
-      // Same user - just update 2FA status if changed
-      setIsSyncing(false);
-    }
-  }, [session, user]);
+              // Clear redirect tracking timestamp when successfully authenticated
+              // This ensures the next session expiration can trigger a redirect
+              localStorage.removeItem(REDIRECT_TRACKING_KEY);
+              localStorage.removeItem(SW_UNREGISTERED_KEY);
+              // Mark that user has been authenticated - allows Service Worker registration
+              localStorage.setItem('sparky_user_was_authenticated', 'true');
 
-  // 2. Cleanup Effect: Handles Logout / Session expiry
-  useEffect(() => {
-    if (!session && !sessionLoading) {
-      const now = Date.now();
-      const isSticky = now - lastManualSignIn < 2000;
+              // Register Service Worker now that user is authenticated
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').catch((err) => {
+                  console.warn('SW registration after auth failed:', err);
+                });
+              }
 
-      if (user !== null && !isSticky) {
-        console.log('[Auth Hook] No session found, clearing user state.');
+              cancelScheduledRedirect(); // Cancel any pending redirect
+              console.debug(
+                'Cleared redirect tracking - OIDC session is valid'
+              );
+            }
+          } else if (
+            oidcResponse.status === 401 ||
+            oidcResponse.status === 403
+          ) {
+            // Session expired or unauthorized - this is expected when behind Authentik proxy
+            // Don't log as warning, just note it for debugging
+            console.debug(
+              'OIDC session not found (401/403) - will check password session or trigger Authentik redirect'
+            );
+          }
+        } catch (oidcError) {
+          console.warn('OIDC session check failed:', oidcError);
+        }
+
+        // If not authenticated via OIDC, attempt to check password session
+        if (!userAuthenticated) {
+          try {
+            const passwordResponse = await fetch('/api/auth/user', {
+              credentials: 'include',
+            });
+            if (passwordResponse.ok) {
+              const userData = await passwordResponse.json();
+              if (userData && userData.userId && userData.email) {
+                const role = userData.role || 'user';
+                setUser({
+                  id: userData.userId,
+                  email: userData.email,
+                  role: role,
+                });
+                userAuthenticated = true;
+
+                // Clear redirect tracking timestamp when successfully authenticated
+                // This ensures the next session expiration can trigger a redirect
+                localStorage.removeItem(REDIRECT_TRACKING_KEY);
+                localStorage.removeItem(SW_UNREGISTERED_KEY);
+                // Mark that user has been authenticated - allows Service Worker registration
+                localStorage.setItem('sparky_user_was_authenticated', 'true');
+
+                // Register Service Worker now that user is authenticated
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.register('/sw.js').catch((err) => {
+                    console.warn('SW registration after auth failed:', err);
+                  });
+                }
+
+                cancelScheduledRedirect(); // Cancel any pending redirect
+                console.debug(
+                  'Cleared redirect tracking - password session is valid'
+                );
+              }
+            } else if (
+              passwordResponse.status === 401 ||
+              passwordResponse.status === 403
+            ) {
+              // No valid session found - this triggers when Authentik session expires
+              console.debug(
+                'No valid session found (401/403) - user will need to re-authenticate'
+              );
+            }
+          } catch (passwordError) {
+            console.warn('Password session check failed:', passwordError);
+          }
+        }
+
+        if (!userAuthenticated) {
+          setUser(null);
+          // Don't redirect here - let Authentik proxy handle initial authentication
+          // The redirect will happen when API calls fail (handled in api.ts)
+        }
+      } catch (error) {
+        console.error('Error during session check:', error);
         setUser(null);
       }
       setIsSyncing(false);
-    }
+    };
   }, [session, sessionLoading, user, lastManualSignIn]);
 
   const refreshUser = useCallback(async () => {
@@ -164,32 +200,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     window.location.href = '/';
   }, []);
 
-  const signIn = useCallback(
-    (
-      userId: string,
-      activeUserId: string,
-      userEmail: string,
-      userRole: string,
-      navigateOnSuccess = true,
-      userFullName?: string
-    ) => {
-      console.log('[Auth Hook] Manual signIn triggered.');
-      setLastManualSignIn(Date.now());
-      setUser({
-        id: userId,
-        activeUserId: activeUserId || userId,
-        email: userEmail,
-        role: userRole,
-        fullName: userFullName || null,
-        twoFactorEnabled: false, // Default for manual sign-in, will be refreshed by session
-        mfaEmailEnabled: false,
+  const signIn = (
+    userId: string,
+    userEmail: string,
+    userRole: string,
+    authType: 'oidc' | 'password',
+    navigateOnSuccess = true
+  ) => {
+    // authType is no longer stored in localStorage; session is managed by httpOnly cookies.
+    setUser({ id: userId, email: userEmail, role: userRole });
+    if (navigateOnSuccess) {
+      navigate('/');
+    }
+
+    // Clear redirect tracking timestamp when user signs in
+    // This ensures the next session expiration can trigger a redirect
+    localStorage.removeItem(REDIRECT_TRACKING_KEY);
+    localStorage.removeItem(SW_UNREGISTERED_KEY);
+    // Mark that user has been authenticated - allows Service Worker registration
+    localStorage.setItem('sparky_user_was_authenticated', 'true');
+
+    // Register Service Worker now that user is authenticated
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('SW registration after auth failed:', err);
       });
-      if (navigateOnSuccess) {
-        navigate('/');
-      }
-    },
-    [navigate]
-  );
+    }
+
+    cancelScheduledRedirect(); // Cancel any pending redirect
+    console.debug('Cleared redirect tracking - user signed in via', authType);
+
+    // Navigate to home after successful sign in (from upstream)
+    if (navigateOnSuccess) {
+      navigate('/');
+    }
+  };
 
   const switchContext = useCallback(
     async (targetUserId: string) => {
