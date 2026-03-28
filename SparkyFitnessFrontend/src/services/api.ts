@@ -1,6 +1,6 @@
-import { toast } from "@/hooks/use-toast";
-import { getUserLoggingLevel } from "@/utils/userPreferences";
-import * as logging from "@/utils/logging";
+import { toast } from '@/hooks/use-toast';
+import { getUserLoggingLevel } from '@/utils/userPreferences';
+import * as logging from '@/utils/logging';
 
 interface ApiCallOptions extends RequestInit {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,7 +13,7 @@ interface ApiCallOptions extends RequestInit {
   responseType?: 'json' | 'text' | 'blob'; // Add responseType option
 }
 
-export const API_BASE_URL = "/api";
+export const API_BASE_URL = '/api';
 //export const API_BASE_URL = 'http://192.168.1.111:3010';
 
 // Key for tracking redirect attempts in localStorage (persists across page reloads)
@@ -38,7 +38,9 @@ export const SW_UNREGISTERED_KEY = 'sparky_sw_unregistered';
       console.debug(`Clearing stale redirect timestamp (${age}ms old)`);
       localStorage.removeItem(REDIRECT_TRACKING_KEY);
     } else {
-      console.debug(`Keeping recent redirect timestamp (${age}ms old) - will clear after 3s`);
+      console.debug(
+        `Keeping recent redirect timestamp (${age}ms old) - will clear after 3s`
+      );
     }
   }
 })();
@@ -74,9 +76,9 @@ async function performRedirectToLogin() {
   localStorage.setItem(REDIRECT_TRACKING_KEY, now.toString());
 
   toast({
-    title: "Session Expired",
-    description: "Your session has expired. Redirecting to login...",
-    variant: "destructive",
+    title: 'Session Expired',
+    description: 'Your session has expired. Redirecting to login...',
+    variant: 'destructive',
   });
 
   // Unregister ALL Service Workers and clear their caches
@@ -92,18 +94,23 @@ async function performRedirectToLogin() {
 
       // If there are Service Workers, unregister them
       if (registrations.length > 0) {
-        console.log(`SPARKY AUTH: Found ${registrations.length} Service Worker(s), unregistering...`);
+        console.log(
+          `SPARKY AUTH: Found ${registrations.length} Service Worker(s), unregistering...`
+        );
 
         // Unregister each one
         for (const registration of registrations) {
           await registration.unregister();
-          console.log('SPARKY AUTH: Unregistered Service Worker:', registration.scope);
+          console.log(
+            'SPARKY AUTH: Unregistered Service Worker:',
+            registration.scope
+          );
         }
 
         // Also clear all caches
         if ('caches' in window) {
           const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map(name => caches.delete(name)));
+          await Promise.all(cacheNames.map((name) => caches.delete(name)));
           console.log('SPARKY AUTH: Cleared all caches');
         }
 
@@ -117,18 +124,24 @@ async function performRedirectToLogin() {
 
         if (!swUnregisteredFlag) {
           // First time: Mark that we unregistered and reload to clear SW from memory
-          console.log('SPARKY AUTH: First detection - marking SW as unregistered and reloading...');
+          console.log(
+            'SPARKY AUTH: First detection - marking SW as unregistered and reloading...'
+          );
           localStorage.setItem(SW_UNREGISTERED_KEY, 'true');
 
           setTimeout(() => {
-            console.log('SPARKY AUTH: Reloading to clear Service Worker from memory');
+            console.log(
+              'SPARKY AUTH: Reloading to clear Service Worker from memory'
+            );
             window.location.reload();
           }, 300);
 
           return; // Exit early - reload will bring us back
         } else {
           // Second time: SW was already unregistered, now it should be gone
-          console.log('SPARKY AUTH: Second load after SW unregistration - SW should be gone now');
+          console.log(
+            'SPARKY AUTH: Second load after SW unregistration - SW should be gone now'
+          );
           wasAfterSwRemoval = true;
           // Clear the flag so next session expiration works
           localStorage.removeItem(SW_UNREGISTERED_KEY);
@@ -138,7 +151,9 @@ async function performRedirectToLogin() {
         // Check if we just removed SW (flag is set but no SW found)
         const swUnregisteredFlag = localStorage.getItem(SW_UNREGISTERED_KEY);
         if (swUnregisteredFlag) {
-          console.log('SPARKY AUTH: This is after SW removal (flag set, no SW detected)');
+          console.log(
+            'SPARKY AUTH: This is after SW removal (flag set, no SW detected)'
+          );
           wasAfterSwRemoval = true;
           localStorage.removeItem(SW_UNREGISTERED_KEY);
         } else {
@@ -146,7 +161,10 @@ async function performRedirectToLogin() {
         }
       }
     } catch (err) {
-      console.warn('SPARKY AUTH: Failed to check/unregister Service Workers:', err);
+      console.warn(
+        'SPARKY AUTH: Failed to check/unregister Service Workers:',
+        err
+      );
     }
   }
 
@@ -155,14 +173,19 @@ async function performRedirectToLogin() {
   // After SW removal (flag was set): use cache-busting to force network request on iOS
   const navigationUrl = wasAfterSwRemoval ? `/?_auth=${now}` : '/';
 
-  console.log(`SPARKY AUTH: Navigation strategy - wasAfterSwRemoval: ${wasAfterSwRemoval}, URL: ${navigationUrl}`);
+  console.log(
+    `SPARKY AUTH: Navigation strategy - wasAfterSwRemoval: ${wasAfterSwRemoval}, URL: ${navigationUrl}`
+  );
 
   // Short delay for navigation
   const delay = 100;
 
   setTimeout(() => {
     try {
-      logging.warn(userLoggingLevel, `Navigating to ${navigationUrl} to trigger Authentik intercept`);
+      logging.warn(
+        userLoggingLevel,
+        `Navigating to ${navigationUrl} to trigger Authentik intercept`
+      );
       console.log('SPARKY AUTH: Navigating to', navigationUrl);
 
       // Use window.location.replace for clean navigation (no history entry)
@@ -183,7 +206,10 @@ async function performRedirectToLogin() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function apiCall(endpoint: string, options?: ApiCallOptions): Promise<any> {
+export async function apiCall(
+  endpoint: string,
+  options?: ApiCallOptions
+): Promise<any> {
   const userLoggingLevel = getUserLoggingLevel();
   let url = options?.externalApi ? endpoint : `${API_BASE_URL}${endpoint}`;
 
@@ -192,7 +218,7 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
     url = `${url}?${queryParams}`;
   }
   const headers: Record<string, string> = {
-    ...(options?.headers as Record<string, string> || {}), // Merge existing headers first
+    ...((options?.headers as Record<string, string>) || {}), // Merge existing headers first
   };
 
   // Set Content-Type for JSON bodies unless it's FormData or already set
@@ -219,7 +245,11 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
   }
 
   if (options?.body) {
-    logging.debug(userLoggingLevel, `API Call: Request body for ${endpoint}:`, options.body);
+    logging.debug(
+      userLoggingLevel,
+      `API Call: Request body for ${endpoint}:`,
+      options.body
+    );
     if (!options.isFormData && typeof options.body === 'object') {
       config.body = JSON.stringify(options.body);
     } else {
@@ -228,63 +258,90 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
   }
 
   try {
-    logging.debug(userLoggingLevel, `API Call: Sending request to ${url} with config:`, config);
+    logging.debug(
+      userLoggingLevel,
+      `API Call: Sending request to ${url} with config:`,
+      config
+    );
     // eslint-disable-next-line no-restricted-globals
     const response = await fetch(url, config);
-    logging.debug(userLoggingLevel, `API Call: Received response from ${url} with status:`, response.status);
+    logging.debug(
+      userLoggingLevel,
+      `API Call: Received response from ${url} with status:`,
+      response.status
+    );
 
     if (!response.ok) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let errorData: any;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.indexOf('application/json') !== -1) {
         try {
           errorData = await response.json();
         } catch (e) {
-          errorData = { message: "Failed to parse JSON error response." };
+          errorData = { message: 'Failed to parse JSON error response.' };
         }
       } else {
         errorData = { message: await response.text() };
       }
-      const errorMessage = (errorData.error ? String(errorData.error) : '') ||
-                           (errorData.message ? String(errorData.message) : '') ||
-                           `API call failed with status ${response.status}`;
-      logging.error(userLoggingLevel, `API Call: Error response from ${url}:`, { status: response.status, errorData });
+      const errorMessage =
+        (errorData.error ? String(errorData.error) : '') ||
+        (errorData.message ? String(errorData.message) : '') ||
+        `API call failed with status ${response.status}`;
+      logging.error(userLoggingLevel, `API Call: Error response from ${url}:`, {
+        status: response.status,
+        errorData,
+      });
 
       // Special handling for 400 errors on recent/top endpoints
       if (
         response.status === 400 &&
         (endpoint === '/exercises/recent' || endpoint === '/exercises/top')
       ) {
-        logging.debug(userLoggingLevel, `Frontend workaround triggered for ${endpoint}: Backend returned 400. Returning empty array.`);
+        logging.debug(
+          userLoggingLevel,
+          `Frontend workaround triggered for ${endpoint}: Backend returned 400. Returning empty array.`
+        );
         return []; // Return empty array to gracefully handle 400 errors on these endpoints
       }
 
       // Special handling for 404 errors on exercise search endpoints
-      if (response.status === 404 && endpoint.startsWith('/exercises/search/')) {
-        logging.debug(userLoggingLevel, `Frontend workaround triggered for ${endpoint}: Backend returned 404. Returning empty array.`);
+      if (
+        response.status === 404 &&
+        endpoint.startsWith('/exercises/search/')
+      ) {
+        logging.debug(
+          userLoggingLevel,
+          `Frontend workaround triggered for ${endpoint}: Backend returned 404. Returning empty array.`
+        );
         return []; // Return empty array to gracefully handle 404 errors on exercise search
       }
 
       // Suppress toast for 404 errors if suppress404Toast is true
       if (response.status === 404 && options?.suppress404Toast) {
-        logging.debug(userLoggingLevel, `API call returned 404 for ${endpoint}, toast suppressed. Returning null.`);
+        logging.debug(
+          userLoggingLevel,
+          `API call returned 404 for ${endpoint}, toast suppressed. Returning null.`
+        );
         return null; // Return null for 404 with suppression
       }
 
       // Handle authentication errors (401) and authorization errors (403)
       // When session expires or Authentik logs user out, redirect to trigger re-authentication
       if (response.status === 401 || response.status === 403) {
-        logging.warn(userLoggingLevel, `Authentication/Authorization failed for ${endpoint}: ${response.status} ${errorMessage}`);
+        logging.warn(
+          userLoggingLevel,
+          `Authentication/Authorization failed for ${endpoint}: ${response.status} ${errorMessage}`
+        );
 
         // Clear any local storage auth data
         localStorage.removeItem('token');
 
         // Show a more user-friendly error message
         toast({
-          title: "Session Expired",
-          description: "Your session has expired. Please log in again.",
-          variant: "destructive",
+          title: 'Session Expired',
+          description: 'Your session has expired. Please log in again.',
+          variant: 'destructive',
         });
 
         // Redirect to root - this will trigger Authentik proxy to redirect to login
@@ -298,9 +355,9 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
 
       // Handle all other errors
       toast({
-        title: "API Error",
+        title: 'API Error',
         description: errorMessage,
-        variant: "destructive",
+        variant: 'destructive',
       });
       throw new Error(errorMessage);
     }
@@ -308,31 +365,44 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
     // Handle different response types
     if (options?.responseType === 'blob') {
       const blobResponse = await response.blob();
-      logging.debug(userLoggingLevel, `API Call: Received blob response from ${url}.`);
+      logging.debug(
+        userLoggingLevel,
+        `API Call: Received blob response from ${url}.`
+      );
       return blobResponse;
     }
     // Handle cases where the response might be empty (e.g., DELETE requests)
     const text = await response.text();
     const jsonResponse = text ? JSON.parse(text) : {};
-    logging.debug(userLoggingLevel, `API Call: Received JSON response from ${url}:`, jsonResponse);
+    logging.debug(
+      userLoggingLevel,
+      `API Call: Received JSON response from ${url}:`,
+      jsonResponse
+    );
     return jsonResponse;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
-    logging.error(userLoggingLevel, "API call network error:", err);
-    
+    logging.error(userLoggingLevel, 'API call network error:', err);
+
     // Default error message
-    const errorMessage = err?.message || "An unknown error occurred";
+    const errorMessage = err?.message || 'An unknown error occurred';
 
     // Network errors can be caused by Authentik proxy redirecting to login page
     // This happens when the session expires and Authentik returns a 302 redirect
     // The browser sees this as a CORS error and throws NetworkError
     // Check if this might be an authentication issue
-    if (err.message && (err.message.includes('NetworkError') || err.message.includes('Failed to fetch'))) {
+    if (
+      err.message &&
+      (err.message.includes('NetworkError') ||
+        err.message.includes('Failed to fetch'))
+    ) {
       const now = Date.now();
 
       // Check last redirect time from localStorage (persists across page reloads)
       const lastRedirectTimeStr = localStorage.getItem(REDIRECT_TRACKING_KEY);
-      const lastRedirectTime = lastRedirectTimeStr ? parseInt(lastRedirectTimeStr, 10) : 0;
+      const lastRedirectTime = lastRedirectTimeStr
+        ? parseInt(lastRedirectTimeStr, 10)
+        : 0;
       const timeSinceLastRedirect = now - lastRedirectTime;
 
       const detectMessage = `NetworkError detected. Last redirect: ${timeSinceLastRedirect}ms ago. Threshold: 3000ms`;
@@ -345,7 +415,10 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
       if (!isRedirectingToLogin && timeSinceLastRedirect > 3000) {
         isRedirectingToLogin = true;
 
-        logging.warn(userLoggingLevel, `Triggering redirect to login. Last redirect was ${timeSinceLastRedirect}ms ago.`);
+        logging.warn(
+          userLoggingLevel,
+          `Triggering redirect to login. Last redirect was ${timeSinceLastRedirect}ms ago.`
+        );
         console.log('SPARKY AUTH: Triggering immediate redirect');
 
         // Clear any scheduled redirect since we're redirecting now
@@ -382,22 +455,28 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
 
       // Don't throw error - just return a rejected promise
       // This prevents upstream error handlers from interfering with redirect
-      return Promise.reject(new Error('Session expired - redirecting to login'));
+      return Promise.reject(
+        new Error('Session expired - redirecting to login')
+      );
     }
 
     // For other network errors, show generic error
     toast({
-      title: "Network Error",
-      description: errorMessage || "Could not connect to the server.",
-      variant: "destructive",
+      title: 'Network Error',
+      description: errorMessage || 'Could not connect to the server.',
+      variant: 'destructive',
     });
     throw new Error(errorMessage, { cause: err });
   }
 }
 
 export const api = {
-  get: (endpoint: string, options?: ApiCallOptions) => apiCall(endpoint, { ...options, method: 'GET' }),
-  post: (endpoint: string, options?: ApiCallOptions) => apiCall(endpoint, { ...options, method: 'POST' }),
-  put: (endpoint: string, options?: ApiCallOptions) => apiCall(endpoint, { ...options, method: 'PUT' }),
-  delete: (endpoint: string, options?: ApiCallOptions) => apiCall(endpoint, { ...options, method: 'DELETE' }),
+  get: (endpoint: string, options?: ApiCallOptions) =>
+    apiCall(endpoint, { ...options, method: 'GET' }),
+  post: (endpoint: string, options?: ApiCallOptions) =>
+    apiCall(endpoint, { ...options, method: 'POST' }),
+  put: (endpoint: string, options?: ApiCallOptions) =>
+    apiCall(endpoint, { ...options, method: 'PUT' }),
+  delete: (endpoint: string, options?: ApiCallOptions) =>
+    apiCall(endpoint, { ...options, method: 'DELETE' }),
 };

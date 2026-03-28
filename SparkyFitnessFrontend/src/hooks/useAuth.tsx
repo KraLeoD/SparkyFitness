@@ -11,7 +11,11 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
 import { fetchIdentityUser, switchUserContext } from '@/api/Auth/auth';
-import { REDIRECT_TRACKING_KEY, SW_UNREGISTERED_KEY, cancelScheduledRedirect } from '@/services/api';
+import {
+  REDIRECT_TRACKING_KEY,
+  SW_UNREGISTERED_KEY,
+  cancelScheduledRedirect,
+} from '@/services/api';
 
 export interface User {
   id: string;
@@ -96,7 +100,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch((err) => {
-          console.warn('SW registration after auth session loaded failed:', err);
+          console.warn(
+            'SW registration after auth session loaded failed:',
+            err
+          );
         });
       }
       cancelScheduledRedirect();
