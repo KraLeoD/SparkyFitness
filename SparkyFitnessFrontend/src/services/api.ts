@@ -3,7 +3,9 @@ import { getUserLoggingLevel } from "@/utils/userPreferences";
 import * as logging from "@/utils/logging";
 
 interface ApiCallOptions extends RequestInit {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params?: Record<string, any>;
   suppress404Toast?: boolean; // New option to suppress toast for 404 errors
   externalApi?: boolean;
@@ -180,6 +182,7 @@ async function performRedirectToLogin() {
   }, delay);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function apiCall(endpoint: string, options?: ApiCallOptions): Promise<any> {
   const userLoggingLevel = getUserLoggingLevel();
   let url = options?.externalApi ? endpoint : `${API_BASE_URL}${endpoint}`;
@@ -226,10 +229,12 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
 
   try {
     logging.debug(userLoggingLevel, `API Call: Sending request to ${url} with config:`, config);
+    // eslint-disable-next-line no-restricted-globals
     const response = await fetch(url, config);
     logging.debug(userLoggingLevel, `API Call: Received response from ${url} with status:`, response.status);
 
     if (!response.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let errorData: any;
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.indexOf("application/json") !== -1) {
@@ -311,6 +316,7 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
     const jsonResponse = text ? JSON.parse(text) : {};
     logging.debug(userLoggingLevel, `API Call: Received JSON response from ${url}:`, jsonResponse);
     return jsonResponse;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     logging.error(userLoggingLevel, "API call network error:", err);
     
@@ -385,7 +391,7 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
       description: errorMessage || "Could not connect to the server.",
       variant: "destructive",
     });
-    throw new Error(errorMessage);
+    throw new Error(errorMessage, { cause: err });
   }
 }
 
