@@ -101,7 +101,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
       cancelScheduledRedirect();
       // -----------------------------------
-      };
 
       //console.log('[Auth Hook] Setting user state from session:', sessionUser.id);
       setUser(sessionUser);
