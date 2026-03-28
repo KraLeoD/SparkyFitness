@@ -205,11 +205,12 @@ async function performRedirectToLogin() {
   }, delay);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable @typescript-eslint/no-explicit-any
 export async function apiCall(
   endpoint: string,
   options?: ApiCallOptions
 ): Promise<any> {
+// eslint-enable @typescript-eslint/no-explicit-any
   const userLoggingLevel = getUserLoggingLevel();
   let url = options?.externalApi ? endpoint : `${API_BASE_URL}${endpoint}`;
 
