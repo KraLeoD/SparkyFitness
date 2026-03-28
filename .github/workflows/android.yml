@@ -122,6 +122,15 @@ jobs:
           VERSION=$(node -p "require('./SparkyFitnessMobile/package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Upload APK as Artifact
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sparkyfitness-${{ steps.version.outputs.version }}-${{ github.run_number }}.apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1

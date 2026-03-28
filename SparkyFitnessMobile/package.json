@@ -63,6 +63,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "react-native-nitro-modules": "^0.30.0",
     "@babel/core": "^7.25.2",
     "@babel/runtime": "^7.25.0",
     "@testing-library/react-native": "^13.3.3",

@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
 import { fetchIdentityUser, switchUserContext } from '@/api/Auth/auth';
+import { REDIRECT_TRACKING_KEY, SW_UNREGISTERED_KEY, cancelScheduledRedirect } from '@/services/api';
 
 export interface User {
   id: string;
@@ -85,6 +86,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         role: extUser.role || 'user',
         twoFactorEnabled: !!extUser.twoFactorEnabled,
         mfaEmailEnabled: !!extUser.mfaEmailEnabled,
+      };
+
+      // --- Authentik Integration Logic ---
+      // Clear redirect tracking timestamp when successfully authenticated
+      localStorage.removeItem(REDIRECT_TRACKING_KEY);
+      localStorage.removeItem(SW_UNREGISTERED_KEY);
+      localStorage.setItem('sparky_user_was_authenticated', 'true');
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('SW registration after auth session loaded failed:', err);
+        });
+      }
+      cancelScheduledRedirect();
+      // -----------------------------------
       };
 
       //console.log('[Auth Hook] Setting user state from session:', sessionUser.id);
@@ -188,6 +204,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         twoFactorEnabled: false, // Default for manual sign-in, will be refreshed by session
         mfaEmailEnabled: false,
       });
+
+      // --- Authentik Integration Logic ---
+      localStorage.removeItem(REDIRECT_TRACKING_KEY);
+      localStorage.removeItem(SW_UNREGISTERED_KEY);
+      localStorage.setItem('sparky_user_was_authenticated', 'true');
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('SW registration after auth failed:', err);
+        });
+      }
+      cancelScheduledRedirect();
+      // -----------------------------------
+
       if (navigateOnSuccess) {
         navigate('/');
       }
