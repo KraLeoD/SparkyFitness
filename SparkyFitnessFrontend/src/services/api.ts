@@ -80,7 +80,6 @@ async function performRedirectToLogin() {
   // Unregister ALL Service Workers and clear their caches
   // Service Workers can serve cached content even after caches are cleared
   // We must unregister them to force network requests
-  let hadServiceWorker = false;
   let wasAfterSwRemoval = false;
   if ('serviceWorker' in navigator) {
     try {
@@ -91,7 +90,6 @@ async function performRedirectToLogin() {
 
       // If there are Service Workers, unregister them
       if (registrations.length > 0) {
-        hadServiceWorker = true;
         console.log(`SPARKY AUTH: Found ${registrations.length} Service Worker(s), unregistering...`);
 
         // Unregister each one
