@@ -1,55 +1,70 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import path from 'path';
 // Removed VitePWA import - we handle Service Worker registration manually
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  const backendHost = process.env.VITE_BACKEND_HOST || 'localhost';
+  const target = `http://${backendHost}:3010`;
   return {
     server: {
-      host: "::",
+      host: '::',
       port: 8080,
-      allowedHosts: ['localhost', '127.0.0.1'], // Hardcoded for debugging
+      allowedHosts: true, // Allow all hosts in development to prevent HMR connection failures
       proxy: {
-      "/api/withings": { // New proxy rule for Withings API calls
-        target: "http://localhost:3010",
-        changeOrigin: true,
-        // No rewrite needed, as the backend expects /api/withings
-      },
-      "/api": {
-        target: "http://localhost:3010",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
-      "/health-data": {
-        target: "http://localhost:3010",
-        changeOrigin: true,
-        rewrite: (path) => `/api${path}`, // Add /api/ prefix
-      },
-      "/openid": {
-        target: "http://localhost:3010",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/openid/, "/openid"), // Keep the /openid prefix
-      },
-      "/uploads": {
-        target: "http://localhost:3010",
-        changeOrigin: true,
+        '/health-data': {
+          target: target,
+          changeOrigin: true,
+          rewrite: (path) => `/api${path}`, // Add /api/ prefix
+        },
+        '/api': {
+          target: target,
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: target,
+          changeOrigin: true,
+        },
       },
     },
-  },
-  plugins: [
-    react(),
-    mode === "development" && componentTagger(),
-    // Removed VitePWA plugin - we handle Service Worker and manifest manually
-    // This prevents VitePWA from injecting registerSW.js script tags
-  ].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "react": path.resolve(__dirname, "node_modules/react"),
-      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+    plugins: [
+      tailwindcss(),
+      react(),
+      // Removed VitePWA plugin - we handle Service Worker and manifest manually
+      // This prevents VitePWA from injecting registerSW.js script tags
+    ].filter(Boolean),
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              // Large independent packages in their own chunks
+              if (id.includes('recharts')) return 'vendor-recharts';
+              if (id.includes('@radix-ui')) return 'vendor-radix';
+              if (
+                id.includes('@ericblade/quagga2') ||
+                id.includes('html5-qrcode') ||
+                id.includes('@zxing/library')
+              )
+                return 'vendor-scanners';
+              if (id.includes('@dnd-kit')) return 'vendor-dnd';
+              // Everything else (React, utilities, auth ) together to avoid dependency issues
+              // This ensures React loads before anything that depends on it
+              return 'vendor-others';
+            }
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1000,
     },
-  },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+        '@workspace/shared': path.resolve(__dirname, '../shared'),
+      },
+      dedupe: ['react', 'react-dom'],
+    },
   };
 });

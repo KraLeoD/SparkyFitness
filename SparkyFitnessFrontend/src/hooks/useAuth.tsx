@@ -1,198 +1,264 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  type ReactNode,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { authClient } from '../lib/auth-client';
+import { fetchIdentityUser, switchUserContext } from '@/api/Auth/auth';
 import { REDIRECT_TRACKING_KEY, SW_UNREGISTERED_KEY, cancelScheduledRedirect } from '@/services/api';
 
-interface User {
+export interface User {
+  id: string;
+  activeUserId: string;
+  email: string;
+  fullName: string | null;
+  role: string;
+  twoFactorEnabled: boolean;
+  mfaEmailEnabled: boolean;
+}
+
+interface ExtendedSessionUser {
   id: string;
   email: string;
-  role: string; // Add role property
-  // Add other user properties as needed
+  name: string | null;
+  activeUserId?: string;
+  role?: string;
+  twoFactorEnabled?: boolean;
+  mfaEmailEnabled?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  signIn: (userId: string, userEmail: string, userRole: string, authType: 'oidc' | 'password' | 'magic_link', navigateOnSuccess?: boolean) => void;
+  signIn: (
+    userId: string,
+    activeUserId: string,
+    userEmail: string,
+    userRole: string,
+    navigateOnSuccess?: boolean,
+    userFullName?: string
+  ) => void;
+  refreshUser: () => Promise<void>;
+  switchContext: (targetUserId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(true); // Track initial hydration
+  const navigate = useNavigate();
+  const prevSessionRef = React.useRef<typeof session>(null);
 
+  // Only show global loading during initial hydration (isSyncing).
+  // Ignoring sessionLoading avoids unmounting components (like Auth/MFA) during background re-fetches.
+  const isLoading = isSyncing;
+
+  const [lastManualSignIn, setLastManualSignIn] = useState<number>(0);
+
+  // 1. Sync Effect: Updates User state when Session changes or invalidates
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        let userAuthenticated = false;
+    // Log when session changes to identify refresh triggers
+    if (session !== prevSessionRef.current) {
+      prevSessionRef.current = session;
+    }
 
-        // Attempt to check OIDC session first
-        try {
-          const oidcResponse = await fetch('/openid/api/me', { credentials: 'include' });
-          if (oidcResponse.ok) {
-            const userData = await oidcResponse.json();
-            if (userData && userData.userId && userData.email) {
-              const role = userData.role || 'user';
-              setUser({ id: userData.userId, email: userData.email, role: role });
-              userAuthenticated = true;
+    // Only process if session has actual user data AND it's different from what we have
+    if (session?.user && (!user || user.id !== session.user.id)) {
+      const extUser = session.user as unknown as ExtendedSessionUser;
 
-              // Clear redirect tracking timestamp when successfully authenticated
-              // This ensures the next session expiration can trigger a redirect
-              localStorage.removeItem(REDIRECT_TRACKING_KEY);
-              localStorage.removeItem(SW_UNREGISTERED_KEY);
-              // Mark that user has been authenticated - allows Service Worker registration
-              localStorage.setItem('sparky_user_was_authenticated', 'true');
-
-              // Register Service Worker now that user is authenticated
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').catch((err) => {
-                  console.warn('SW registration after auth failed:', err);
-                });
-              }
-
-              cancelScheduledRedirect(); // Cancel any pending redirect
-              console.debug('Cleared redirect tracking - OIDC session is valid');
-            }
-          } else if (oidcResponse.status === 401 || oidcResponse.status === 403) {
-            // Session expired or unauthorized - this is expected when behind Authentik proxy
-            // Don't log as warning, just note it for debugging
-            console.debug('OIDC session not found (401/403) - will check password session or trigger Authentik redirect');
-          }
-        } catch (oidcError) {
-          console.warn('OIDC session check failed:', oidcError);
-        }
-
-        // If not authenticated via OIDC, attempt to check password session
-        if (!userAuthenticated) {
-          try {
-            const passwordResponse = await fetch('/api/auth/user', { credentials: 'include' });
-            if (passwordResponse.ok) {
-              const userData = await passwordResponse.json();
-              if (userData && userData.userId && userData.email) {
-                const role = userData.role || 'user';
-                setUser({ id: userData.userId, email: userData.email, role: role });
-                userAuthenticated = true;
-
-                // Clear redirect tracking timestamp when successfully authenticated
-                // This ensures the next session expiration can trigger a redirect
-                localStorage.removeItem(REDIRECT_TRACKING_KEY);
-                localStorage.removeItem(SW_UNREGISTERED_KEY);
-                // Mark that user has been authenticated - allows Service Worker registration
-                localStorage.setItem('sparky_user_was_authenticated', 'true');
-
-                // Register Service Worker now that user is authenticated
-                if ('serviceWorker' in navigator) {
-                  navigator.serviceWorker.register('/sw.js').catch((err) => {
-                    console.warn('SW registration after auth failed:', err);
-                  });
-                }
-
-                cancelScheduledRedirect(); // Cancel any pending redirect
-                console.debug('Cleared redirect tracking - password session is valid');
-              }
-            } else if (passwordResponse.status === 401 || passwordResponse.status === 403) {
-              // No valid session found - this triggers when Authentik session expires
-              console.debug('No valid session found (401/403) - user will need to re-authenticate');
-            }
-          } catch (passwordError) {
-            console.warn('Password session check failed:', passwordError);
-          }
-        }
-
-        if (!userAuthenticated) {
-          setUser(null);
-          // Don't redirect here - let Authentik proxy handle initial authentication
-          // The redirect will happen when API calls fail (handled in api.ts)
-        }
-      } catch (error) {
-        console.error('Error during session check:', error);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkSession();
-  }, []);
-
-  const signOut = async () => {
-    try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
+      const sessionUser: User = {
+        id: extUser.id,
+        activeUserId: extUser.activeUserId || extUser.id,
+        email: extUser.email,
+        fullName: extUser.name || null,
+        role: extUser.role || 'user',
+        twoFactorEnabled: !!extUser.twoFactorEnabled,
+        mfaEmailEnabled: !!extUser.mfaEmailEnabled,
       };
 
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({}),
-      });
+      // --- Authentik Integration Logic ---
+      // Clear redirect tracking timestamp when successfully authenticated
+      localStorage.removeItem(REDIRECT_TRACKING_KEY);
+      localStorage.removeItem(SW_UNREGISTERED_KEY);
+      localStorage.setItem('sparky_user_was_authenticated', 'true');
 
-      if (response.ok) {
-        const responseData = await response.json();
-        // Clear client-side user state. Server-side logout handles cookie invalidation.
-        setUser(null);
-
-        if (responseData.redirectUrl) {
-          // If a redirectUrl is provided, it means an OIDC logout is required
-          window.location.href = responseData.redirectUrl;
-        } else {
-          // For local logins or if OIDC redirect is not needed, redirect to home or login
-          window.location.href = '/'; // Or your desired post-logout landing page
-        }
-      } else {
-        const errorData = await response.json();
-        console.error('Logout failed on server:', errorData);
-        // Even if server logout fails, clear client-side state to avoid inconsistent state
-        setUser(null);
-        window.location.href = '/'; // Redirect even on server-side error to ensure clean state
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('SW registration after auth session loaded failed:', err);
+        });
       }
+      cancelScheduledRedirect();
+      // -----------------------------------
+      };
+
+      //console.log('[Auth Hook] Setting user state from session:', sessionUser.id);
+      setUser(sessionUser);
+
+      // Fetch Authoritative Data (Active Context)
+      // This runs on every session update to ensure we are strictly in sync with the backend.
+      fetchIdentityUser()
+        .then((realUserData) => {
+          setUser((prev) => {
+            if (!prev) return prev;
+            if (
+              prev.activeUserId === realUserData.activeUserId &&
+              prev.fullName === realUserData.fullName
+            ) {
+              return prev; // No change
+            }
+            return {
+              ...prev,
+              activeUserId: realUserData.activeUserId,
+              fullName:
+                realUserData.activeUserFullName ||
+                realUserData.activeUserEmail ||
+                null,
+              email: realUserData.activeUserEmail,
+            };
+          });
+        })
+        .catch((err) =>
+          console.error(
+            '[Auth Hook] Failed to fetch authoritative user data:',
+            err
+          )
+        );
+
+      setIsSyncing(false);
+    } else if (session?.user && user && user.id === session.user.id) {
+      // Same user - just update 2FA status if changed
+      setIsSyncing(false);
+    }
+  }, [session, user]);
+
+  // 2. Cleanup Effect: Handles Logout / Session expiry
+  useEffect(() => {
+    if (!session && !sessionLoading) {
+      const now = Date.now();
+      const isSticky = now - lastManualSignIn < 2000;
+
+      if (user !== null && !isSticky) {
+        console.log('[Auth Hook] No session found, clearing user state.');
+        setUser(null);
+        queryClient.clear();
+      }
+      setIsSyncing(false);
+    }
+  }, [session, sessionLoading, user, lastManualSignIn, queryClient]);
+
+  const refreshUser = useCallback(async () => {
+    setIsSyncing(true); // Re-trigger syncing state during manual refresh
+    try {
+      // Force invalidate the session to ensure fresh data
+      await authClient.getSession();
     } catch (error) {
-      console.error('Network error during logout:', error);
-      // On network error, still attempt to clear local state and redirect
-      setUser(null);
-      window.location.href = '/';
+      console.error('[Auth Hook] Error refreshing session:', error);
+    } finally {
+      setIsSyncing(false);
     }
-  };
+  }, []);
 
-  const signIn = (userId: string, userEmail: string, userRole: string, authType: 'oidc' | 'password', navigateOnSuccess = true) => {
-    // authType is no longer stored in localStorage; session is managed by httpOnly cookies.
-    setUser({ id: userId, email: userEmail, role: userRole });
-    if (navigateOnSuccess) {
-      navigate('/');
+  const signOut = useCallback(async () => {
+    try {
+      const { error } = await authClient.signOut();
+      if (error) {
+        console.error('[Auth Hook] SignOut API error:', error);
+      }
+    } catch (err) {
+      console.error('[Auth Hook] SignOut unexpected error:', err);
     }
+    setUser(null);
+    queryClient.clear();
+    window.location.href = '/';
+  }, [queryClient]);
 
-    // Clear redirect tracking timestamp when user signs in
-    // This ensures the next session expiration can trigger a redirect
-    localStorage.removeItem(REDIRECT_TRACKING_KEY);
-    localStorage.removeItem(SW_UNREGISTERED_KEY);
-    // Mark that user has been authenticated - allows Service Worker registration
-    localStorage.setItem('sparky_user_was_authenticated', 'true');
-
-    // Register Service Worker now that user is authenticated
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.warn('SW registration after auth failed:', err);
+  const signIn = useCallback(
+    (
+      userId: string,
+      activeUserId: string,
+      userEmail: string,
+      userRole: string,
+      navigateOnSuccess = true,
+      userFullName?: string
+    ) => {
+      console.log('[Auth Hook] Manual signIn triggered.');
+      setLastManualSignIn(Date.now());
+      setUser({
+        id: userId,
+        activeUserId: activeUserId || userId,
+        email: userEmail,
+        role: userRole,
+        fullName: userFullName || null,
+        twoFactorEnabled: false, // Default for manual sign-in, will be refreshed by session
+        mfaEmailEnabled: false,
       });
-    }
 
-    cancelScheduledRedirect(); // Cancel any pending redirect
-    console.debug('Cleared redirect tracking - user signed in via', authType);
+      // --- Authentik Integration Logic ---
+      localStorage.removeItem(REDIRECT_TRACKING_KEY);
+      localStorage.removeItem(SW_UNREGISTERED_KEY);
+      localStorage.setItem('sparky_user_was_authenticated', 'true');
 
-    // Navigate to home after successful sign in (from upstream)
-    if (navigateOnSuccess) {
-      navigate('/');
-    }
-  };
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('SW registration after auth failed:', err);
+        });
+      }
+      cancelScheduledRedirect();
+      // -----------------------------------
 
-  const navigate = useNavigate();
+      if (navigateOnSuccess) {
+        navigate('/');
+      }
+    },
+    [navigate]
+  );
 
-  const value = {
-    user,
-    loading,
-    signOut,
-    signIn,
-  };
+  const switchContext = useCallback(
+    async (targetUserId: string) => {
+      try {
+        const data = await switchUserContext(targetUserId);
+
+        setUser((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            activeUserId: data.activeUserId || targetUserId,
+          };
+        });
+
+        queryClient.clear();
+        await refreshUser();
+      } catch (error) {
+        console.error(error);
+        throw error;
+      }
+    },
+    [refreshUser, queryClient]
+  );
+
+  const value = useMemo(
+    () => ({
+      user,
+      loading: isLoading,
+      signOut,
+      signIn,
+      refreshUser,
+      switchContext,
+    }),
+    [user, isLoading, signOut, signIn, refreshUser, switchContext]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

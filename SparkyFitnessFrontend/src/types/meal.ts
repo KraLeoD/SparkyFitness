@@ -1,4 +1,4 @@
-import { Food } from './food';
+import type { Food } from './food';
 
 export interface Meal {
   id?: string;
@@ -23,6 +23,21 @@ export interface MealFood {
   protein?: number;
   carbs?: number;
   fat?: number;
+  saturated_fat?: number;
+  polyunsaturated_fat?: number;
+  monounsaturated_fat?: number;
+  trans_fat?: number;
+  cholesterol?: number;
+  sodium?: number;
+  potassium?: number;
+  dietary_fiber?: number;
+  sugars?: number;
+  vitamin_a?: number;
+  vitamin_c?: number;
+  calcium?: number;
+  iron?: number;
+  glycemic_index?: string;
+  custom_nutrients?: Record<string, string | number>;
   serving_size?: number;
   serving_unit?: string;
 }
@@ -46,6 +61,21 @@ export interface MealFoodPayload {
   protein?: number;
   carbs?: number;
   fat?: number;
+  saturated_fat?: number;
+  polyunsaturated_fat?: number;
+  monounsaturated_fat?: number;
+  trans_fat?: number;
+  cholesterol?: number;
+  sodium?: number;
+  potassium?: number;
+  dietary_fiber?: number;
+  sugars?: number;
+  vitamin_a?: number;
+  vitamin_c?: number;
+  calcium?: number;
+  iron?: number;
+  glycemic_index?: string;
+  custom_nutrients?: Record<string, string | number>;
   serving_size?: number;
   serving_unit?: string;
 }
@@ -109,4 +139,29 @@ export interface FoodEntryMeal {
   calcium?: number;
   iron?: number;
   glycemic_index?: string; // Aggregated glycemic index
+  custom_nutrients?: Record<string, string | number>;
 }
+
+export interface MealTotals {
+  calories: number; // Stored internally as kcal
+  protein: number;
+  carbs: number;
+  fat: number;
+  dietary_fiber: number;
+  sugars: number;
+  sodium: number;
+  cholesterol: number;
+  saturated_fat: number;
+  monounsaturated_fat: number;
+  polyunsaturated_fat: number;
+  trans_fat: number;
+  potassium: number;
+  vitamin_a: number;
+  vitamin_c: number;
+  iron: number;
+  calcium: number;
+  custom_nutrients?: Record<string, number>; // Add custom_nutrients support
+  [key: string]: number | string | Record<string, number> | null | undefined;
+}
+
+export type MealFilter = 'all' | 'mine' | 'family' | 'public' | 'needs-review';

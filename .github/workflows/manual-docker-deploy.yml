@@ -2,6 +2,11 @@ name: Manually Publish Docker Images
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker image tag'
+        required: true
+        default: 'dev'
 
 jobs:
   push_to_registries:
@@ -16,12 +21,6 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
-
-      - name: Read version from package.json
-        id: package-version
-        uses: martinbeentjes/npm-get-version-action@v1.3.1
-        with:
-          path: SparkyFitnessServer
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -47,7 +46,7 @@ jobs:
             codewithcj/sparkyfitness
             ghcr.io/${{ github.repository }}-frontend
           tags: |
-            type=raw,value=v${{ steps.package-version.outputs.current-version }}
+            type=raw,value=${{ github.event.inputs.tag }}
 
       - name: Build and push frontend
         id: push-frontend
@@ -59,6 +58,8 @@ jobs:
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Generate artifact attestation Frontend
         uses: actions/attest-build-provenance@v2
@@ -75,18 +76,20 @@ jobs:
             codewithcj/sparkyfitness_server
             ghcr.io/${{ github.repository }}-server
           tags: |
-            type=raw,value=v${{ steps.package-version.outputs.current-version }}
+            type=raw,value=${{ github.event.inputs.tag }}
 
       - name: Build and push server
         id: push-server
         uses: docker/build-push-action@v6
         with:
-          context: SparkyFitnessServer
+          context: .
           file: docker/Dockerfile.backend
           push: true
           tags: ${{ steps.meta-server.outputs.tags }}
           labels: ${{ steps.meta-server.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Generate artifact attestation server
         uses: actions/attest-build-provenance@v2
@@ -103,7 +106,7 @@ jobs:
             codewithcj/sparkyfitness_garmin
             ghcr.io/${{ github.repository }}-garmin
           tags: |
-            type=raw,value=v${{ steps.package-version.outputs.current-version }}
+            type=raw,value=${{ github.event.inputs.tag }}
 
       - name: Build and push Garmin Microservice
         id: push-garmin
@@ -115,6 +118,8 @@ jobs:
           tags: ${{ steps.meta-garmin.outputs.tags }}
           labels: ${{ steps.meta-garmin.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Generate artifact attestation Garmin Microservice
         uses: actions/attest-build-provenance@v2

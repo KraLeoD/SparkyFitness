@@ -1,8 +1,3 @@
-export interface AuthResponse {
-  userId: string;
-  token: string;
-}
-
 export interface MoodEntry {
   id: string;
   user_id: string;
@@ -29,6 +24,7 @@ export interface SleepStageEvent {
 
 export interface SleepEntry {
   id: string;
+  user_id: string;
   entry_date: string;
   bedtime: string;
   wake_time: string;
@@ -36,6 +32,24 @@ export interface SleepEntry {
   time_asleep_in_seconds: number | null;
   sleep_score: number | null;
   source: string;
+  created_at: string;
+  updated_at: string;
+  deep_sleep_seconds: number | null;
+  light_sleep_seconds: number | null;
+  rem_sleep_seconds: number | null;
+  awake_sleep_seconds: number | null;
+  average_spo2_value: number | null;
+  lowest_spo2_value: number | null;
+  highest_spo2_value: number | null;
+  average_respiration_value: number | null;
+  lowest_respiration_value: number | null;
+  highest_respiration_value: number | null;
+  awake_count: number | null;
+  avg_sleep_stress: number | null;
+  restless_moments_count: number | null;
+  avg_overnight_hrv: number | null;
+  body_battery_change: number | null;
+  resting_heart_rate: number | null;
   stage_events?: SleepStageEvent[];
 }
 
@@ -56,6 +70,7 @@ export interface SleepAnalyticsData {
   latestWakeTime: string | null;
   sleepEfficiency: number;
   sleepDebt: number;
+  weight?: number;
   stagePercentages: SleepStageSummary;
   awakePeriods: number;
   totalAwakeDuration: number;
@@ -71,9 +86,9 @@ export interface SleepChartData {
   segments: SleepStageEvent[];
 }
 
-export const SLEEP_STAGE_COLORS: { [key: string]: string } = {
+export const SLEEP_STAGE_COLORS = {
   awake: '#F87171', // red-400
-  rem: '#C084FC',   // purple-400
+  rem: '#C084FC', // purple-400
   light: '#60A5FA', // blue-400
-  deep: '#4ADE80',  // green-400
+  deep: '#4ADE80', // green-400
 };

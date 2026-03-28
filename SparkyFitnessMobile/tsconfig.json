@@ -1,3 +1,26 @@
 {
-  "extends": "@react-native/typescript-config"
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@workspace/shared": [
+        "../shared/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "__tests__",
+    "plugins",
+    "drivers",
+    "reports",
+    "plans",
+    
+  ]
 }

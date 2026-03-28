@@ -1,11 +1,18 @@
-
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Maximize2, Minimize2, ZoomIn, ZoomOut } from "lucide-react";
+import { useState, useMemo } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface ZoomableChartProps {
-  children: ((isMaximized: boolean, zoomLevel: number) => React.ReactNode) | React.ReactNode;
+  children:
+    | ((isMaximized: boolean, zoomLevel: number) => React.ReactNode)
+    | React.ReactNode;
   title: string;
 }
 
@@ -14,20 +21,32 @@ const ZoomableChart = ({ children, title }: ZoomableChartProps) => {
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 0.25, 3));
+    setZoomLevel((prev) => Math.min(prev + 0.25, 3));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
+    setZoomLevel((prev) => Math.max(prev - 0.25, 0.5));
   };
 
   const resetZoom = () => {
     setZoomLevel(1);
   };
 
+  const renderedChildren = useMemo(() => {
+    return typeof children === 'function'
+      ? children(false, zoomLevel)
+      : children;
+  }, [children, zoomLevel]);
+
+  const maximizedChildren = useMemo(() => {
+    return typeof children === 'function'
+      ? children(true, zoomLevel)
+      : children;
+  }, [children, zoomLevel]);
+
   return (
     <>
-      <div className="relative group">
+      <div className="relative group min-w-0">
         <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
           <Button
             variant="outline"
@@ -56,9 +75,7 @@ const ZoomableChart = ({ children, title }: ZoomableChartProps) => {
             <Maximize2 className="h-3 w-3" />
           </Button>
         </div>
-        <div className="w-full h-full">
-          {typeof children === 'function' ? children(false, zoomLevel) : children}
-        </div>
+        <div className="w-full h-full min-h-[200px]">{renderedChildren}</div>
       </div>
 
       <Dialog open={isMaximized} onOpenChange={setIsMaximized}>
@@ -79,11 +96,7 @@ const ZoomableChart = ({ children, title }: ZoomableChartProps) => {
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetZoom}
-              >
+              <Button variant="outline" size="sm" onClick={resetZoom}>
                 Reset
               </Button>
               <Button
@@ -104,7 +117,7 @@ const ZoomableChart = ({ children, title }: ZoomableChartProps) => {
             </div>
           </div>
           <div className="w-full h-[calc(100%-110px)] overflow-auto">
-            {typeof children === 'function' ? children(true, zoomLevel) : children}
+            {maximizedChildren}
           </div>
         </DialogContent>
       </Dialog>

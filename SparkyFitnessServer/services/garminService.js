@@ -6,6 +6,9 @@ const exercisePresetEntryRepository = require('../models/exercisePresetEntryRepo
 const workoutPresetRepository = require('../models/workoutPresetRepository'); // New import
 const measurementService = require('./measurementService'); // Import measurementService
 const moodRepository = require('../models/moodRepository'); // Import moodRepository
+const garminConnectService = require('../integrations/garminconnect/garminConnectService');
+const garminMeasurementMapping = require('../integrations/garminconnect/garminMeasurementMapping');
+const moment = require('moment');
 
 async function processActivitiesAndWorkouts(userId, data, startDate, endDate) {
   const { activities, workouts } = data;
@@ -13,17 +16,38 @@ async function processActivitiesAndWorkouts(userId, data, startDate, endDate) {
 
   // Comprehensive cleanup for Garmin-sourced data for the date range
   // This ensures a clean slate for the current sync, preventing duplicates and stale data.
-  log('info', `[garminService] Performing comprehensive cleanup for Garmin data for user ${userId} from ${startDate} to ${endDate}.`);
-  await exerciseEntryRepository.deleteExerciseEntriesByEntrySourceAndDate(userId, startDate, endDate, 'garmin');
-  await exercisePresetEntryRepository.deleteExercisePresetEntriesByEntrySourceAndDate(userId, startDate, endDate, 'garmin');
+  log(
+    'info',
+    `[garminService] Performing comprehensive cleanup for Garmin data for user ${userId} from ${startDate} to ${endDate}.`
+  );
+  await exerciseEntryRepository.deleteExerciseEntriesByEntrySourceAndDate(
+    userId,
+    startDate,
+    endDate,
+    'garmin'
+  );
+  await exercisePresetEntryRepository.deleteExercisePresetEntriesByEntrySourceAndDate(
+    userId,
+    startDate,
+    endDate,
+    'garmin'
+  );
 
   // Process Activities and Workouts
   if (activities && Array.isArray(activities)) {
     for (const activityData of activities) {
       // Determine if it's a workout session (with summarizedExerciseSets or exercise_sets)
       // or a simple activity.
-      if (activityData.activity?.summarizedExerciseSets?.length > 0 || activityData.exercise_sets?.exerciseSets?.length > 0) {
-        await processGarminWorkoutSession(userId, activityData, startDate, endDate);
+      if (
+        activityData.activity?.summarizedExerciseSets?.length > 0 ||
+        activityData.exercise_sets?.exerciseSets?.length > 0
+      ) {
+        await processGarminWorkoutSession(
+          userId,
+          activityData,
+          startDate,
+          endDate
+        );
       } else if (activityData.activity) {
         await processGarminSimpleActivity(userId, activityData);
       }
@@ -42,8 +66,17 @@ async function processActivitiesAndWorkouts(userId, data, startDate, endDate) {
   return { processedEntries: processedCount };
 }
 
-async function processGarminHealthAndWellnessData(userId, actingUserId, healthData, startDate, endDate) {
-  log('info', `[garminService] Processing Garmin health and wellness data for user ${userId} from ${startDate} to ${endDate}.`);
+async function processGarminHealthAndWellnessData(
+  userId,
+  actingUserId,
+  healthData,
+  startDate,
+  endDate
+) {
+  log(
+    'info',
+    `[garminService] Processing Garmin health and wellness data for user ${userId} from ${startDate} to ${endDate}.`
+  );
   const processedResults = [];
   const errors = [];
 
@@ -51,18 +84,24 @@ async function processGarminHealthAndWellnessData(userId, actingUserId, healthDa
     // Process Stress Data
     if (healthData.stress && Array.isArray(healthData.stress)) {
       for (const stressEntry of healthData.stress) {
-        const { date, raw_stress_data, derived_mood_value, derived_mood_notes } = stressEntry;
+        const {
+          date,
+          raw_stress_data,
+          derived_mood_value,
+          derived_mood_notes,
+        } = stressEntry;
 
         // Store raw stress data as a custom measurement
         if (raw_stress_data) {
           try {
-            const customCategory = await measurementService.getOrCreateCustomCategory(
-              userId,
-              actingUserId,
-              "Raw Stress Data",
-              "text",
-              "JSON"
-            );
+            const customCategory =
+              await measurementService.getOrCreateCustomCategory(
+                userId,
+                actingUserId,
+                'Raw Stress Data',
+                'text',
+                'JSON'
+              );
 
             await measurementService.upsertCustomMeasurementEntry(
               userId,
@@ -71,14 +110,27 @@ async function processGarminHealthAndWellnessData(userId, actingUserId, healthDa
                 category_id: customCategory.id,
                 value: raw_stress_data,
                 entry_date: date,
-                notes: `Source: Garmin`,
+                notes: 'Source: Garmin',
                 source: 'garmin',
               }
             );
-            processedResults.push({ type: 'raw_stress_data', status: 'success', date });
+            processedResults.push({
+              type: 'raw_stress_data',
+              status: 'success',
+              date,
+            });
           } catch (error) {
-            log('error', `Error storing raw stress data for user ${userId} on ${date}:`, error);
-            errors.push({ type: 'raw_stress_data', status: 'error', date, message: error.message });
+            log(
+              'error',
+              `Error storing raw stress data for user ${userId} on ${date}:`,
+              error
+            );
+            errors.push({
+              type: 'raw_stress_data',
+              status: 'error',
+              date,
+              message: error.message,
+            });
           }
         }
 
@@ -91,10 +143,23 @@ async function processGarminHealthAndWellnessData(userId, actingUserId, healthDa
               derived_mood_notes,
               date
             );
-            processedResults.push({ type: 'derived_mood_value', status: 'success', date });
+            processedResults.push({
+              type: 'derived_mood_value',
+              status: 'success',
+              date,
+            });
           } catch (error) {
-            log('error', `Error storing derived mood value for user ${userId} on ${date}:`, error);
-            errors.push({ type: 'derived_mood_value', status: 'error', date, message: error.message });
+            log(
+              'error',
+              `Error storing derived mood value for user ${userId} on ${date}:`,
+              error
+            );
+            errors.push({
+              type: 'derived_mood_value',
+              status: 'error',
+              date,
+              message: error.message,
+            });
           }
         }
       }
@@ -106,31 +171,44 @@ async function processGarminHealthAndWellnessData(userId, actingUserId, healthDa
     //     // Process heart rate data
     //   }
     // }
-
   } catch (error) {
-    log('error', `[garminService] Unexpected error in processGarminHealthAndWellnessData for user ${userId}:`, error);
+    log(
+      'error',
+      `[garminService] Unexpected error in processGarminHealthAndWellnessData for user ${userId}:`,
+      error
+    );
     errors.push({ type: 'general', status: 'error', message: error.message });
   }
 
   if (errors.length > 0) {
-    throw new Error(JSON.stringify({
-      message: "Some Garmin health and wellness data entries could not be processed.",
-      processed: processedResults,
-      errors: errors
-    }));
+    throw new Error(
+      JSON.stringify({
+        message:
+          'Some Garmin health and wellness data entries could not be processed.',
+        processed: processedResults,
+        errors: errors,
+      })
+    );
   } else {
     return {
-      message: "All Garmin health and wellness data successfully processed.",
-      processed: processedResults
+      message: 'All Garmin health and wellness data successfully processed.',
+      processed: processedResults,
     };
   }
 }
 
 // Helper function to process a Garmin workout session (e.g., Wokroutv2.txt)
-async function processGarminWorkoutSession(userId, sessionData, startDate, endDate) {
+async function processGarminWorkoutSession(
+  userId,
+  sessionData,
+  startDate,
+  endDate
+) {
   const { activity, exercise_sets } = sessionData;
   const workoutName = activity.activityName || 'Garmin Workout Session';
-  const entryDate = activity.startTimeLocal ? new Date(activity.startTimeLocal).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+  const entryDate = activity.startTimeLocal
+    ? new Date(activity.startTimeLocal).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0];
 
   // Data from sessionData should already be parsed objects if coming from the microservice
   const details = sessionData.details || {};
@@ -139,17 +217,25 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
   const metricDescriptors = details.metricDescriptors || [];
 
   // Find the index for heart rate in activityDetailMetrics
-  const hrIndex = metricDescriptors.findIndex(desc => desc.key === 'directHeartRate');
-  const timestampIndex = metricDescriptors.findIndex(desc => desc.key === 'directTimestamp');
+  const hrIndex = metricDescriptors.findIndex(
+    (desc) => desc.key === 'directHeartRate'
+  );
+  const timestampIndex = metricDescriptors.findIndex(
+    (desc) => desc.key === 'directTimestamp'
+  );
 
-  let workoutPreset = await workoutPresetRepository.getWorkoutPresetByName(userId, workoutName);
+  let workoutPreset = await workoutPresetRepository.getWorkoutPresetByName(
+    userId,
+    workoutName
+  );
   const isNewWorkoutPreset = !workoutPreset;
 
   if (isNewWorkoutPreset) {
     workoutPreset = await workoutPresetRepository.createWorkoutPreset({
       user_id: userId,
       name: workoutName,
-      description: activity.notes || `Workout session from Garmin: ${workoutName}`,
+      description:
+        activity.notes || `Workout session from Garmin: ${workoutName}`,
       is_public: false,
     });
   }
@@ -163,8 +249,14 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
     created_by_user_id: userId,
     notes: `Garmin Workout Session: ${workoutName}`,
     source: 'garmin', // Add source to exercise_preset_entries
+    steps: activity.steps || activity.totalSteps || activity.stepCount || 0,
   };
-  const newExercisePresetEntry = await exercisePresetEntryRepository.createExercisePresetEntry(userId, exercisePresetEntryData, userId);
+  const newExercisePresetEntry =
+    await exercisePresetEntryRepository.createExercisePresetEntry(
+      userId,
+      exercisePresetEntryData,
+      userId
+    );
 
   await activityDetailsRepository.createActivityDetail(userId, {
     exercise_preset_entry_id: newExercisePresetEntry.id, // Link to preset entry
@@ -175,7 +267,8 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
   });
 
   if (exercise_sets && Array.isArray(exercise_sets.exerciseSets)) {
-    const groupedExercises = {};
+    const groupedExercises = [];
+    let currentGroup = null;
     let totalActiveDurationSeconds = 0;
     let lastActiveSet = null; // To store the last active set for assigning rest time
     const activeSetsWithStartAndEndTimes = []; // Store active sets with their calculated start and end times
@@ -185,65 +278,117 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
       const garminSet = exercise_sets.exerciseSets[i];
       // We need to look further ahead to find the next ACTIVE set for rest time calculation
 
-      if (garminSet.exercises && garminSet.exercises.length > 0) {
-        const garminExerciseName = garminSet.exercises[0].name || garminSet.exercises[0].category;
-        const exerciseName = garminExerciseName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      let garminExerciseName = null;
+      let garminCategory = 'Uncategorized';
 
-        if (!groupedExercises[exerciseName]) {
-          groupedExercises[exerciseName] = {
-            exerciseDetails: garminSet.exercises[0],
+      if (garminSet.exercises && garminSet.exercises.length > 0) {
+        garminExerciseName =
+          garminSet.exercises[0].name || garminSet.exercises[0].category;
+        garminCategory = garminSet.exercises[0].category || 'Uncategorized';
+      } else if (garminSet.category) {
+        garminExerciseName = garminSet.category;
+        garminCategory = garminSet.category;
+      }
+
+      // If we still don't have an exercise name (e.g. an unnamed REST or WARM_UP set),
+      // inherit it from the current group to prevent breaking the exercise into multiple 1-set entries.
+      // We ONLY inherit for non-ACTIVE sets. An ACTIVE set without a name is a new, unrecognized exercise.
+      if (
+        !garminExerciseName &&
+        currentGroup &&
+        garminSet.setType !== 'ACTIVE'
+      ) {
+        garminExerciseName = currentGroup.name;
+        garminCategory =
+          currentGroup.exerciseDetails.category || 'Uncategorized';
+      } else if (!garminExerciseName) {
+        garminExerciseName = 'Unknown Exercise';
+      }
+
+      if (garminExerciseName) {
+        const exerciseName = garminExerciseName
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (l) => l.toUpperCase());
+        const stepIndex = garminSet.stepIndex || garminSet.wktStepId || null;
+
+        if (
+          !currentGroup ||
+          currentGroup.name !== exerciseName ||
+          (stepIndex !== null &&
+            currentGroup.stepIndex !== null &&
+            currentGroup.stepIndex !== stepIndex)
+        ) {
+          currentGroup = {
+            name: exerciseName,
+            stepIndex: stepIndex,
+            exerciseDetails: { category: garminCategory },
             sets: [],
             totalDuration: 0,
+            activeDuration: 0,
             startTime: null, // To store the start time of the first active set for this exercise
-            endTime: null,   // To store the end time of the last active set for this exercise
+            endTime: null, // To store the end time of the last active set for this exercise
           };
+          groupedExercises.push(currentGroup);
         }
 
         const setTypeMapping = {
-          'ACTIVE': 'Working Set',
-          'REST': 'Rest Set',
-          'WARM_UP': 'Warm-up Set',
+          ACTIVE: 'Working Set',
+          REST: 'Rest Set',
+          WARM_UP: 'Warm-up Set',
           // Add other mappings as needed
         };
 
         const setType = setTypeMapping[garminSet.setType] || 'Working Set'; // Default to 'Working Set' if not mapped
 
-        const durationSeconds = garminSet.duration ? Math.round(garminSet.duration) : 0;
-        const weightKg = garminSet.weight ? parseFloat((garminSet.weight * 0.001).toFixed(2)) : 0; // Assuming weight is in grams, convert to kg and round to 2 decimal places
+        const durationSeconds = garminSet.duration
+          ? Math.round(garminSet.duration)
+          : 0;
+        const weightKg = garminSet.weight
+          ? parseFloat((garminSet.weight * 0.001).toFixed(2))
+          : 0; // Assuming weight is in grams, convert to kg and round to 2 decimal places
 
-        const currentSet = {
-          set_number: groupedExercises[exerciseName].sets.length + 1, // Incremental set number
-          set_type: setType,
-          reps: Math.round(garminSet.repetitionCount || 0),
-          weight: weightKg,
-          duration: durationSeconds,
-          rest_time: 0, // Default rest time
-          notes: garminSet.notes || '',
-        };
-        groupedExercises[exerciseName].sets.push(currentSet);
+        if (garminSet.setType !== 'REST') {
+          const currentSet = {
+            set_number: currentGroup.sets.length + 1, // Incremental set number
+            set_type: setType,
+            reps: Math.round(garminSet.repetitionCount || 0),
+            weight: weightKg,
+            duration: Math.round(durationSeconds / 60),
+            rest_time: 0, // Default rest time
+            notes: garminSet.notes || '',
+          };
+          currentGroup.sets.push(currentSet);
 
-        if (garminSet.setType === 'ACTIVE') {
-          groupedExercises[exerciseName].totalDuration += durationSeconds;
-          totalActiveDurationSeconds += durationSeconds;
+          if (garminSet.setType === 'ACTIVE') {
+            currentGroup.totalDuration += durationSeconds;
+            currentGroup.activeDuration += durationSeconds;
+            totalActiveDurationSeconds += durationSeconds;
 
-          const setStartTime = new Date(garminSet.startTime).getTime(); // Convert to milliseconds
-          const setEndTime = setStartTime + (durationSeconds * 1000);
+            const setStartTime = new Date(garminSet.startTime).getTime(); // Convert to milliseconds
+            const setEndTime = setStartTime + durationSeconds * 1000;
 
-          if (!groupedExercises[exerciseName].startTime || setStartTime < groupedExercises[exerciseName].startTime) {
-            groupedExercises[exerciseName].startTime = setStartTime;
+            if (
+              !currentGroup.startTime ||
+              setStartTime < currentGroup.startTime
+            ) {
+              currentGroup.startTime = setStartTime;
+            }
+            if (!currentGroup.endTime || setEndTime > currentGroup.endTime) {
+              currentGroup.endTime = setEndTime;
+            }
+            lastActiveSet = currentSet; // Store this active set for potential rest time assignment
+
+            // Store active set details for later rest time calculation
+            activeSetsWithStartAndEndTimes.push({
+              set: currentSet,
+              startTime: setStartTime,
+              endTime: setEndTime,
+              garminSetIndex: i, // Store original index to find next active set
+            });
           }
-          if (!groupedExercises[exerciseName].endTime || setEndTime > groupedExercises[exerciseName].endTime) {
-            groupedExercises[exerciseName].endTime = setEndTime;
-          }
-          lastActiveSet = currentSet; // Store this active set for potential rest time assignment
-
-          // Store active set details for later rest time calculation
-          activeSetsWithStartAndEndTimes.push({
-            set: currentSet,
-            startTime: setStartTime,
-            endTime: setEndTime,
-            garminSetIndex: i // Store original index to find next active set
-          });
+        } else {
+          // It's a REST set, just add its duration to the group's total duration
+          currentGroup.totalDuration += durationSeconds;
         }
       }
     }
@@ -255,20 +400,34 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
 
       // Find the next active set in the original garmin exerciseSets array
       let nextActiveSetInfo = null;
-      for (let j = currentActiveSetInfo.garminSetIndex + 1; j < exercise_sets.exerciseSets.length; j++) {
+      for (
+        let j = currentActiveSetInfo.garminSetIndex + 1;
+        j < exercise_sets.exerciseSets.length;
+        j++
+      ) {
         const potentialNextGarminSet = exercise_sets.exerciseSets[j];
-        if (potentialNextGarminSet.setType === 'ACTIVE' && potentialNextGarminSet.exercises && potentialNextGarminSet.exercises.length > 0) {
+        if (
+          potentialNextGarminSet.setType === 'ACTIVE' &&
+          potentialNextGarminSet.exercises &&
+          potentialNextGarminSet.exercises.length > 0
+        ) {
           // Found the next active set
-          const nextSetStartTime = new Date(potentialNextGarminSet.startTime).getTime();
-          const nextSetDuration = potentialNextGarminSet.duration ? Math.round(potentialNextGarminSet.duration / 1000) : 0;
+          const nextSetStartTime = new Date(
+            potentialNextGarminSet.startTime
+          ).getTime();
+          const nextSetDuration = potentialNextGarminSet.duration
+            ? Math.round(potentialNextGarminSet.duration)
+            : 0;
           nextActiveSetInfo = {
             startTime: nextSetStartTime,
-            duration: nextSetDuration
+            duration: nextSetDuration,
           };
           break;
         } else if (potentialNextGarminSet.setType === 'REST') {
           // If there's a REST set immediately following, and it has a duration, use that
-          const restDuration = potentialNextGarminSet.duration ? Math.round(potentialNextGarminSet.duration / 1000) : 0;
+          const restDuration = potentialNextGarminSet.duration
+            ? Math.round(potentialNextGarminSet.duration)
+            : 0;
           if (restDuration > 0) {
             currentSet.rest_time = restDuration;
             break; // Rest time assigned, move to next active set
@@ -277,17 +436,30 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
       }
 
       if (nextActiveSetInfo) {
-        const timeBetweenSets = (nextActiveSetInfo.startTime - currentActiveSetInfo.endTime) / 1000; // in seconds
+        const timeBetweenSets =
+          (nextActiveSetInfo.startTime - currentActiveSetInfo.endTime) / 1000; // in seconds
         if (timeBetweenSets > 0) {
           currentSet.rest_time = Math.round(timeBetweenSets);
         }
       }
     }
 
-    for (const exerciseName in groupedExercises) {
-      const { exerciseDetails, sets, totalDuration, startTime, endTime } = groupedExercises[exerciseName];
+    let exerciseSortOrder = 0;
+    for (const group of groupedExercises) {
+      const exerciseName = group.name;
+      const {
+        exerciseDetails,
+        sets,
+        totalDuration,
+        activeDuration,
+        startTime,
+        endTime,
+      } = group;
 
-      let exercise = await exerciseRepository.findExerciseByNameAndUserId(exerciseName, userId);
+      let exercise = await exerciseRepository.findExerciseByNameAndUserId(
+        exerciseName,
+        userId
+      );
       if (!exercise) {
         exercise = await exerciseRepository.createExercise({
           user_id: userId,
@@ -308,10 +480,11 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
       }
 
       let perExerciseCaloriesBurned = 0;
-      if (totalActiveDurationSeconds > 0 && activity.calories) {
-        perExerciseCaloriesBurned = (totalDuration / totalActiveDurationSeconds) * activity.calories;
+      if (totalActiveDurationSeconds > 0 && activity.active_calories) {
+        perExerciseCaloriesBurned =
+          (activeDuration / totalActiveDurationSeconds) *
+          activity.active_calories;
       }
-
 
       let perExerciseAvgHeartRate = null;
       if (hrIndex !== -1 && timestampIndex !== -1 && startTime && endTime) {
@@ -323,7 +496,12 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
 
           // Garmin timestamps are in milliseconds, convert to seconds for comparison with startTime/endTime
           // startTime and endTime are already in milliseconds
-          if (metricTimestamp >= startTime && metricTimestamp <= endTime && heartRate !== undefined && heartRate !== null) {
+          if (
+            metricTimestamp >= startTime &&
+            metricTimestamp <= endTime &&
+            heartRate !== undefined &&
+            heartRate !== null
+          ) {
             heartRateSum += heartRate;
             heartRateCount++;
           }
@@ -334,18 +512,32 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
       }
 
       const exerciseEntryData = {
-       exercise_id: exercise.id,
-       duration_minutes: totalDuration / 60, // Convert total seconds to minutes
-       calories_burned: Math.round(perExerciseCaloriesBurned), // Round calories to nearest whole number
-       entry_date: entryDate,
-       notes: `Garmin Exercise: ${exerciseName}`,
-       sets: sets,
-       exercise_preset_entry_id: newExercisePresetEntry.id, // Link to preset entry
-       avg_heart_rate: perExerciseAvgHeartRate ? Math.round(perExerciseAvgHeartRate) : null, // Round to nearest whole number or keep null
-     };
-      await exerciseEntryRepository.createExerciseEntry(userId, exerciseEntryData, userId, 'garmin', newExercisePresetEntry.id);
+        exercise_id: exercise.id,
+        duration_minutes: totalDuration / 60, // Convert total seconds to minutes
+        calories_burned: Math.round(perExerciseCaloriesBurned), // Round calories to nearest whole number
+        entry_date: entryDate,
+        notes: `Garmin Exercise: ${exerciseName}`,
+        sets: sets,
+        exercise_preset_entry_id: newExercisePresetEntry.id, // Link to preset entry
+        avg_heart_rate: perExerciseAvgHeartRate
+          ? Math.round(perExerciseAvgHeartRate)
+          : null, // Round to nearest whole number or keep null
+        source_id: activity.activityId
+          ? `${activity.activityId}_${exerciseSortOrder}`
+          : null,
+        steps: activity.steps || activity.totalSteps || activity.stepCount || 0,
+      };
+      await exerciseEntryRepository.createExerciseEntry(
+        userId,
+        { ...exerciseEntryData, sort_order: exerciseSortOrder },
+        userId,
+        'garmin',
+        newExercisePresetEntry.id
+      );
 
-      const existingExerciseInPreset = workoutPreset.exercises?.find(e => e.exercise_id === exercise.id);
+      const existingExerciseInPreset = workoutPreset.exercises?.find(
+        (e) => e.exercise_id === exercise.id
+      );
 
       if (isNewWorkoutPreset || !existingExerciseInPreset) {
         await workoutPresetRepository.addExerciseToWorkoutPreset(
@@ -353,9 +545,11 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
           workoutPreset.id,
           exercise.id,
           null, // image_url
-          isNewWorkoutPreset ? sets : [] // Only add sets to the preset if it's a new preset
+          isNewWorkoutPreset ? sets : [], // Only add sets to the preset if it's a new preset
+          exerciseSortOrder
         );
       }
+      exerciseSortOrder++;
     }
   }
 }
@@ -363,9 +557,13 @@ async function processGarminWorkoutSession(userId, sessionData, startDate, endDa
 // Helper function to process a Garmin workout definition (e.g., workout training.txt)
 async function processGarminWorkoutDefinition(userId, workoutData) {
   const workoutName = workoutData.workoutName || 'Garmin Workout Definition';
-  const description = workoutData.description || `Workout definition from Garmin: ${workoutName}`;
+  const description =
+    workoutData.description || `Workout definition from Garmin: ${workoutName}`;
 
-  let workoutPreset = await workoutPresetRepository.getWorkoutPresetByName(userId, workoutName);
+  let workoutPreset = await workoutPresetRepository.getWorkoutPresetByName(
+    userId,
+    workoutName
+  );
   if (!workoutPreset) {
     workoutPreset = await workoutPresetRepository.createWorkoutPreset({
       user_id: userId,
@@ -375,18 +573,32 @@ async function processGarminWorkoutDefinition(userId, workoutData) {
     });
   }
 
-  if (workoutData.workoutSegments && Array.isArray(workoutData.workoutSegments)) {
+  if (
+    workoutData.workoutSegments &&
+    Array.isArray(workoutData.workoutSegments)
+  ) {
+    let exerciseSortOrder = 0;
     for (const segment of workoutData.workoutSegments) {
       if (segment.workoutSteps && Array.isArray(segment.workoutSteps)) {
         for (const step of segment.workoutSteps) {
-          const stepsToProcess = step.type === 'RepeatGroupDTO' ? step.workoutSteps : [step];
+          const stepsToProcess =
+            step.type === 'RepeatGroupDTO' ? step.workoutSteps : [step];
 
           for (const individualStep of stepsToProcess) {
-            if (individualStep.type === 'ExecutableStepDTO' && individualStep.exerciseName) {
+            if (
+              individualStep.type === 'ExecutableStepDTO' &&
+              individualStep.exerciseName
+            ) {
               const garminExerciseName = individualStep.exerciseName;
-              const exerciseName = garminExerciseName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              const exerciseName = garminExerciseName
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, (l) => l.toUpperCase());
 
-              let exercise = await exerciseRepository.findExerciseByNameAndUserId(exerciseName, userId);
+              let exercise =
+                await exerciseRepository.findExerciseByNameAndUserId(
+                  exerciseName,
+                  userId
+                );
               if (!exercise) {
                 exercise = await exerciseRepository.createExercise({
                   user_id: userId,
@@ -398,17 +610,29 @@ async function processGarminWorkoutDefinition(userId, workoutData) {
                 });
               }
 
-              const sets = [{
-                set_number: 1,
-                set_type: individualStep.stepType?.stepTypeKey,
-                reps: individualStep.endConditionValue || 0,
-                weight: individualStep.weightValue ? individualStep.weightValue * 0.453592 : 0, // Assuming weight is in pounds, convert to kg
-                duration: 0,
-                rest_time: 0,
-                notes: individualStep.description || '',
-              }];
+              const sets = [
+                {
+                  set_number: 1,
+                  set_type: individualStep.stepType?.stepTypeKey,
+                  reps: individualStep.endConditionValue || 0,
+                  weight: individualStep.weightValue
+                    ? individualStep.weightValue * 0.453592
+                    : 0, // Assuming weight is in pounds, convert to kg
+                  duration: 0,
+                  rest_time: 0,
+                  notes: individualStep.description || '',
+                },
+              ];
 
-              await workoutPresetRepository.addExerciseToWorkoutPreset(userId, workoutPreset.id, exercise.id, null, sets);
+              await workoutPresetRepository.addExerciseToWorkoutPreset(
+                userId,
+                workoutPreset.id,
+                exercise.id,
+                null,
+                sets,
+                exerciseSortOrder
+              );
+              exerciseSortOrder++;
             }
           }
         }
@@ -420,8 +644,15 @@ async function processGarminWorkoutDefinition(userId, workoutData) {
 // Helper function to process a simple Garmin activity
 async function processGarminSimpleActivity(userId, activityData) {
   const { activity } = activityData;
-  const exerciseName = activity.activityType?.typeKey ? activity.activityType.typeKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Garmin Activity';
-  let exercise = await exerciseRepository.findExerciseByNameAndUserId(exerciseName, userId);
+  const exerciseName = activity.activityType?.typeKey
+    ? activity.activityType.typeKey
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (l) => l.toUpperCase())
+    : 'Garmin Activity';
+  let exercise = await exerciseRepository.findExerciseByNameAndUserId(
+    exerciseName,
+    userId
+  );
 
   if (!exercise) {
     exercise = await exerciseRepository.createExercise({
@@ -434,19 +665,29 @@ async function processGarminSimpleActivity(userId, activityData) {
     });
   }
 
-  const entryDate = activity.startTimeLocal ? new Date(activity.startTimeLocal).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+  const entryDate = activity.startTimeLocal
+    ? new Date(activity.startTimeLocal).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0];
 
   const exerciseEntryData = {
     exercise_id: exercise.id,
     duration_minutes: activity.duration || 0,
-    calories_burned: activity.calories || 0,
+    calories_burned: activity.active_calories || 0,
     entry_date: entryDate,
     notes: `Garmin Activity: ${activity.activityName} (${activity.activityType?.typeKey})`,
     distance: activity.distance,
-    avg_heart_rate: activity.averageHeartRateInBeatsPerMinute || null,
+    avg_heart_rate:
+      activity.averageHR || activity.averageHeartRateInBeatsPerMinute || null,
+    source_id: activity.activityId?.toString() ?? null,
+    steps: activity.steps || activity.totalSteps || activity.stepCount || 0,
   };
 
-  const newEntry = await exerciseEntryRepository.createExerciseEntry(userId, exerciseEntryData, userId, 'garmin');
+  const newEntry = await exerciseEntryRepository.createExerciseEntry(
+    userId,
+    exerciseEntryData,
+    userId,
+    'garmin'
+  );
 
   await activityDetailsRepository.createActivityDetail(userId, {
     exercise_entry_id: newEntry.id,
@@ -454,7 +695,10 @@ async function processGarminSimpleActivity(userId, activityData) {
     detail_type: 'full_activity_data',
     detail_data: {
       activity: activityData.activity,
-      details: activityData.details || { activityDetailMetrics: [], metricDescriptors: [] },
+      details: activityData.details || {
+        activityDetailMetrics: [],
+        metricDescriptors: [],
+      },
       splits: activityData.splits || { lapDTOs: [] },
       hr_in_timezones: activityData.hr_in_timezones || [],
     },
@@ -464,36 +708,240 @@ async function processGarminSimpleActivity(userId, activityData) {
 
 const sleepRepository = require('../models/sleepRepository'); // Import sleepRepository
 
-async function processGarminSleepData(userId, actingUserId, sleepDataArray, startDate, endDate) {
-    const processedResults = [];
-    const errors = [];
+async function processGarminSleepData(
+  userId,
+  actingUserId,
+  sleepDataArray,
+  startDate,
+  endDate
+) {
+  const processedResults = [];
+  const errors = [];
 
-    // Comprehensive cleanup for Garmin-sourced sleep data for the date range
-    log('info', `[garminService] Performing comprehensive cleanup for Garmin sleep data for user ${userId} from ${startDate} to ${endDate}.`);
-    await sleepRepository.deleteSleepEntriesByEntrySourceAndDate(userId, 'garmin', startDate, endDate);
+  // Comprehensive cleanup for Garmin-sourced sleep data for the date range
+  log(
+    'info',
+    `[garminService] Performing comprehensive cleanup for Garmin sleep data for user ${userId} from ${startDate} to ${endDate}.`
+  );
+  await sleepRepository.deleteSleepEntriesByEntrySourceAndDate(
+    userId,
+    'garmin',
+    startDate,
+    endDate
+  );
 
-    for (const sleepEntry of sleepDataArray) {
-        try {
-            const result = await measurementService.processSleepEntry(userId, actingUserId, sleepEntry);
-            processedResults.push({ status: 'success', data: result });
-        } catch (error) {
-            log('error', `Error processing Garmin sleep entry for user ${userId}:`, error);
-            errors.push({ status: 'error', message: error.message, entry: sleepEntry });
+  for (const sleepEntry of sleepDataArray) {
+    try {
+      const result = await measurementService.processSleepEntry(
+        userId,
+        actingUserId,
+        sleepEntry
+      );
+      processedResults.push({ status: 'success', data: result });
+    } catch (error) {
+      log(
+        'error',
+        `Error processing Garmin sleep entry for user ${userId}:`,
+        error
+      );
+      errors.push({
+        status: 'error',
+        message: error.message,
+        entry: sleepEntry,
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(
+      JSON.stringify({
+        message: 'Some Garmin sleep entries could not be processed.',
+        processed: processedResults,
+        errors: errors,
+      })
+    );
+  } else {
+    return {
+      message: 'All Garmin sleep data successfully processed.',
+      processed: processedResults,
+    };
+  }
+}
+
+async function syncGarminData(
+  userId,
+  syncType = 'manual',
+  customStartDate = null,
+  customEndDate = null
+) {
+  let startDate, endDate;
+  const today = moment();
+
+  if (customStartDate) {
+    startDate = customStartDate;
+    endDate = customEndDate || today.format('YYYY-MM-DD');
+  } else if (syncType === 'manual') {
+    endDate = today.format('YYYY-MM-DD');
+    startDate = today.clone().subtract(7, 'days').format('YYYY-MM-DD');
+  } else if (syncType === 'scheduled') {
+    endDate = today.format('YYYY-MM-DD');
+    startDate = today.format('YYYY-MM-DD');
+  } else {
+    throw new Error("Invalid syncType. Must be 'manual' or 'scheduled'.");
+  }
+
+  log(
+    'info',
+    `[garminService] Starting Garmin sync (${syncType}) for user ${userId} from ${startDate} to ${endDate}.`
+  );
+  const results = {
+    health: null,
+    activities: null,
+  };
+
+  // Phase 1: Health and Wellness — runs independently so a failure here does not skip activities
+  try {
+    // 1. Sync Health and Wellness
+    log('info', '[garminService] Fetching Health and Wellness data...');
+    const healthWellnessData =
+      await garminConnectService.syncGarminHealthAndWellness(
+        userId,
+        startDate,
+        endDate,
+        []
+      );
+
+    // 2. Process Health and Wellness (Stress, Mood, etc.)
+    const processedGarminHealthData = await processGarminHealthAndWellnessData(
+      userId,
+      userId,
+      healthWellnessData.data,
+      startDate,
+      endDate
+    );
+
+    // 3. Map and Process other Health Metrics (Steps, Weight, etc.)
+    const processedHealthData = [];
+    for (const metric in healthWellnessData.data) {
+      if (metric === 'stress') continue; // Already processed
+
+      const dailyEntries = healthWellnessData.data[metric];
+      if (Array.isArray(dailyEntries)) {
+        for (const entry of dailyEntries) {
+          const calendarDateRaw = entry.date;
+          if (!calendarDateRaw) continue;
+
+          const calendarDate = moment(calendarDateRaw).format('YYYY-MM-DD');
+
+          for (const key in entry) {
+            if (key === 'date') continue;
+
+            let mapping = garminMeasurementMapping[key];
+            if (!mapping && key === 'value') {
+              mapping = garminMeasurementMapping[metric];
+            }
+            if (mapping) {
+              const value = entry[key];
+              if (value === null || value === undefined) continue;
+
+              const type =
+                mapping.targetType === 'check_in'
+                  ? mapping.field
+                  : mapping.name;
+              processedHealthData.push({
+                type: type,
+                value: value,
+                date: calendarDate,
+                source: 'garmin',
+                dataType: mapping.dataType,
+                measurementType: mapping.measurementType,
+              });
+            }
+          }
         }
+      }
     }
 
-    if (errors.length > 0) {
-        throw new Error(JSON.stringify({
-            message: "Some Garmin sleep entries could not be processed.",
-            processed: processedResults,
-            errors: errors
-        }));
-    } else {
-        return {
-            message: "All Garmin sleep data successfully processed.",
-            processed: processedResults
-        };
+    let measurementServiceResult = {};
+    if (processedHealthData.length > 0) {
+      measurementServiceResult = await measurementService.processHealthData(
+        processedHealthData,
+        userId,
+        userId
+      );
     }
+
+    // 4. Process Sleep
+    let processedSleepData = {};
+    if (
+      healthWellnessData.data &&
+      healthWellnessData.data.sleep &&
+      healthWellnessData.data.sleep.length > 0
+    ) {
+      processedSleepData = await processGarminSleepData(
+        userId,
+        userId,
+        healthWellnessData.data.sleep,
+        startDate,
+        endDate
+      );
+    }
+
+    results.health = {
+      processedGarminHealthData,
+      measurementServiceResult,
+      processedSleepData,
+    };
+  } catch (healthError) {
+    log(
+      'error',
+      `[garminService] Error during health sync for user ${userId}:`,
+      healthError
+    );
+    results.health = {
+      error:
+        healthError instanceof Error
+          ? healthError.message
+          : String(healthError),
+    };
+  }
+
+  // Phase 2: Activities and Workouts — always runs even if Phase 1 failed
+  try {
+    // 5. Sync Activities and Workouts
+    log('info', '[garminService] Fetching Activities and Workouts data...');
+    const activitiesData =
+      await garminConnectService.fetchGarminActivitiesAndWorkouts(
+        userId,
+        startDate,
+        endDate
+      );
+
+    // 6. Process Activities and Workouts
+    const processedActivities = await processActivitiesAndWorkouts(
+      userId,
+      activitiesData,
+      startDate,
+      endDate
+    );
+
+    results.activities = processedActivities;
+  } catch (activitiesError) {
+    log(
+      'error',
+      `[garminService] Error during activities sync for user ${userId}:`,
+      activitiesError
+    );
+    results.activities = {
+      error:
+        activitiesError instanceof Error
+          ? activitiesError.message
+          : String(activitiesError),
+    };
+  }
+
+  log('info', `[garminService] Full Garmin sync completed for user ${userId}.`);
+  return results;
 }
 
 module.exports = {
@@ -503,4 +951,5 @@ module.exports = {
   processGarminSimpleActivity,
   processGarminSleepData,
   processGarminHealthAndWellnessData,
+  syncGarminData,
 };

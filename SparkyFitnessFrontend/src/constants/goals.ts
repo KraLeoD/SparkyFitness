@@ -1,4 +1,4 @@
-import { ExpandedGoals } from '@/types/goals';
+import type { ExpandedGoals, WeeklyGoalPlan } from '@/types/goals';
 
 export const DEFAULT_GOALS: ExpandedGoals = {
   calories: 2000,
@@ -29,3 +29,57 @@ export const DEFAULT_GOALS: ExpandedGoals = {
   dinner_percentage: 25,
   snacks_percentage: 25,
 };
+
+import { CENTRAL_NUTRIENT_CONFIG } from './nutrients';
+
+export const NUTRIENT_CONFIG = [
+  ...Object.values(CENTRAL_NUTRIENT_CONFIG).filter((n) => n.id !== 'calories'),
+];
+
+export const DEFAULT_PLAN: Partial<WeeklyGoalPlan> = {
+  plan_name: '',
+  is_active: true,
+  monday_preset_id: null,
+  tuesday_preset_id: null,
+  wednesday_preset_id: null,
+  thursday_preset_id: null,
+  friday_preset_id: null,
+  saturday_preset_id: null,
+  sunday_preset_id: null,
+  end_date: null,
+};
+
+export const PREDEFINED_GOAL_KEYS = [
+  'id',
+  'user_id',
+  'preset_name',
+  'calories',
+  'protein',
+  'carbs',
+  'fat',
+  'water_goal_ml',
+  'saturated_fat',
+  'polyunsaturated_fat',
+  'monounsaturated_fat',
+  'trans_fat',
+  'cholesterol',
+  'sodium',
+  'potassium',
+  'dietary_fiber',
+  'sugars',
+  'vitamin_a',
+  'vitamin_c',
+  'calcium',
+  'iron',
+  'target_exercise_calories_burned',
+  'target_exercise_duration_minutes',
+  'protein_percentage',
+  'carbs_percentage',
+  'fat_percentage',
+  'breakfast_percentage',
+  'lunch_percentage',
+  'dinner_percentage',
+  'snacks_percentage',
+  'created_at',
+  'updated_at',
+];

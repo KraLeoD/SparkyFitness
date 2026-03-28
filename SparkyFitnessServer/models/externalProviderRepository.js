@@ -6,13 +6,18 @@ async function getExternalDataProviders(userId) {
   const client = await getClient(userId); // User-specific operation
   try {
     const result = await client.query(
-      'SELECT id, user_id, provider_name, provider_type, is_active, base_url, shared_with_public, encrypted_access_token FROM external_data_providers ORDER BY created_at DESC',
+      `SELECT edp.id, edp.user_id, edp.provider_name, edp.provider_type, edp.is_active, edp.base_url, 
+              edp.shared_with_public, edp.encrypted_access_token, edp.sync_frequency,
+              ept.is_strictly_private
+       FROM external_data_providers edp
+       LEFT JOIN external_provider_types ept ON edp.provider_type = ept.id
+       ORDER BY edp.created_at DESC`,
       []
     );
     // log('debug', `getExternalDataProviders: Raw query results for user ${userId}:`, result.rows);
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       ...row,
-      has_token: !!row.encrypted_access_token // Add has_token property
+      has_token: !!row.encrypted_access_token, // Add has_token property
     }));
   } finally {
     client.release();
@@ -25,61 +30,90 @@ async function getExternalDataProvidersByUserId(viewerUserId, targetUserId) {
   try {
     const result = await client.query(
       `SELECT
-        id, user_id, provider_name, provider_type, is_active, base_url, shared_with_public, sync_frequency,
-        encrypted_app_id, app_id_iv, app_id_tag,
-        encrypted_app_key, app_key_iv, app_key_tag,
-        token_expires_at, external_user_id,
-        encrypted_garth_dump, garth_dump_iv, garth_dump_tag,
-        encrypted_access_token -- Include encrypted_access_token
-        FROM external_data_providers
-        WHERE user_id = $1
-        ORDER BY created_at DESC`,
-        [targetUserId]
+        edp.id, edp.user_id, edp.provider_name, edp.provider_type, edp.is_active, edp.base_url, edp.shared_with_public, edp.sync_frequency,
+        edp.encrypted_app_id, edp.app_id_iv, edp.app_id_tag,
+        edp.encrypted_app_key, edp.app_key_iv, edp.app_key_tag,
+        edp.token_expires_at, edp.external_user_id,
+        edp.encrypted_garth_dump, edp.garth_dump_iv, edp.garth_dump_tag,
+        edp.encrypted_access_token, -- Include encrypted_access_token
+        ept.is_strictly_private
+        FROM external_data_providers edp
+        LEFT JOIN external_provider_types ept ON edp.provider_type = ept.id
+        WHERE edp.user_id = $1
+        ORDER BY edp.created_at DESC`,
+      [targetUserId]
     );
-    const providers = await Promise.all(result.rows.map(async (row) => {
-      let decryptedAppId = null;
-      let decryptedAppKey = null;
-      let decryptedGarthDump = null;
+    const providers = await Promise.all(
+      result.rows.map(async (row) => {
+        let decryptedAppId = null;
+        let decryptedAppKey = null;
+        let decryptedGarthDump = null;
 
-      if (row.encrypted_app_id && row.app_id_iv && row.app_id_tag) {
-        try {
-          decryptedAppId = await decrypt(row.encrypted_app_id, row.app_id_iv, row.app_id_tag, ENCRYPTION_KEY);
-        } catch (e) {
-          log('error', 'Error decrypting app_id for provider:', row.id, e);
+        if (row.encrypted_app_id && row.app_id_iv && row.app_id_tag) {
+          try {
+            decryptedAppId = await decrypt(
+              row.encrypted_app_id,
+              row.app_id_iv,
+              row.app_id_tag,
+              ENCRYPTION_KEY
+            );
+          } catch (e) {
+            log('error', 'Error decrypting app_id for provider:', row.id, e);
+          }
         }
-      }
-      if (row.encrypted_app_key && row.app_key_iv && row.app_key_tag) {
-        try {
-          decryptedAppKey = await decrypt(row.encrypted_app_key, row.app_key_iv, row.app_key_tag, ENCRYPTION_KEY);
-        } catch (e) {
-          log('error', 'Error decrypting app_key for provider:', row.id, e);
+        if (row.encrypted_app_key && row.app_key_iv && row.app_key_tag) {
+          try {
+            decryptedAppKey = await decrypt(
+              row.encrypted_app_key,
+              row.app_key_iv,
+              row.app_key_tag,
+              ENCRYPTION_KEY
+            );
+          } catch (e) {
+            log('error', 'Error decrypting app_key for provider:', row.id, e);
+          }
         }
-      }
-      if (row.encrypted_garth_dump && row.garth_dump_iv && row.garth_dump_tag) {
-        try {
-          decryptedGarthDump = await decrypt(row.encrypted_garth_dump, row.garth_dump_iv, row.garth_dump_tag, ENCRYPTION_KEY);
-        } catch (e) {
-          log('error', 'Error decrypting garth_dump for provider:', row.id, e);
+        if (
+          row.encrypted_garth_dump &&
+          row.garth_dump_iv &&
+          row.garth_dump_tag
+        ) {
+          try {
+            decryptedGarthDump = await decrypt(
+              row.encrypted_garth_dump,
+              row.garth_dump_iv,
+              row.garth_dump_tag,
+              ENCRYPTION_KEY
+            );
+          } catch (e) {
+            log(
+              'error',
+              'Error decrypting garth_dump for provider:',
+              row.id,
+              e
+            );
+          }
         }
-      }
 
-      return {
-        id: row.id,
-        provider_name: row.provider_name,
-        provider_type: row.provider_type,
-        user_id: row.user_id,
-        shared_with_public: row.shared_with_public,
-        app_id: decryptedAppId,
-        app_key: decryptedAppKey,
-        token_expires_at: row.token_expires_at,
-        external_user_id: row.external_user_id,
-        garth_dump: decryptedGarthDump,
-        is_active: row.is_active,
-        base_url: row.base_url,
-        sync_frequency: row.sync_frequency,
-        has_token: !!row.encrypted_access_token // Add has_token property
-      };
-    }));
+        return {
+          id: row.id,
+          provider_name: row.provider_name,
+          provider_type: row.provider_type,
+          user_id: row.user_id,
+          shared_with_public: row.shared_with_public,
+          app_id: decryptedAppId,
+          app_key: decryptedAppKey,
+          token_expires_at: row.token_expires_at,
+          external_user_id: row.external_user_id,
+          garth_dump: decryptedGarthDump,
+          is_active: row.is_active,
+          base_url: row.base_url,
+          sync_frequency: row.sync_frequency,
+          has_token: !!row.encrypted_access_token, // Add has_token property
+          is_strictly_private: !!row.is_strictly_private,
+        };
+      })
+    );
     return providers;
   } finally {
     client.release();
@@ -89,7 +123,11 @@ async function getExternalDataProvidersByUserId(viewerUserId, targetUserId) {
 async function createExternalDataProvider(providerData) {
   const client = await getClient(providerData.user_id); // User-specific operation
   try {
-    log('debug', 'createExternalDataProvider: Received providerData:', providerData);
+    log(
+      'debug',
+      'createExternalDataProvider: Received providerData:',
+      providerData
+    );
     const {
       provider_name,
       provider_type,
@@ -171,9 +209,9 @@ async function updateExternalDataProvider(id, userId, updateData) {
     let appKeyIv = updateData.app_key_iv || null;
     let appKeyTag = updateData.app_key_tag || null;
 
-    let encryptedGarthDump = updateData.encrypted_garth_dump || null;
-    let garthDumpIv = updateData.garth_dump_iv || null;
-    let garthDumpTag = updateData.garth_dump_tag || null;
+    const encryptedGarthDump = updateData.encrypted_garth_dump || null;
+    const garthDumpIv = updateData.garth_dump_iv || null;
+    const garthDumpTag = updateData.garth_dump_tag || null;
 
     if (updateData.app_id !== undefined) {
       const encryptedId = await encrypt(updateData.app_id, ENCRYPTION_KEY);
@@ -228,7 +266,7 @@ async function updateExternalDataProvider(id, userId, updateData) {
         updateData.token_expires_at,
         updateData.external_user_id,
         id,
-        updateData.sync_frequency
+        updateData.sync_frequency,
       ]
     );
     return result.rows[0];
@@ -242,12 +280,15 @@ async function getExternalDataProviderById(providerId) {
   try {
     const result = await client.query(
       `SELECT
-        id, provider_name, provider_type, user_id, is_active, base_url, shared_with_public,
-        encrypted_app_id, app_id_iv, app_id_tag,
-        encrypted_app_key, app_key_iv, app_key_tag,
-        token_expires_at, external_user_id,
-        encrypted_garth_dump, garth_dump_iv, garth_dump_tag
-      FROM external_data_providers WHERE id = $1`,
+        edp.id, edp.provider_name, edp.provider_type, edp.user_id, edp.is_active, edp.base_url, edp.shared_with_public, edp.sync_frequency,
+        edp.encrypted_app_id, edp.app_id_iv, edp.app_id_tag,
+        edp.encrypted_app_key, edp.app_key_iv, edp.app_key_tag,
+        edp.token_expires_at, edp.external_user_id,
+        edp.encrypted_garth_dump, edp.garth_dump_iv, edp.garth_dump_tag,
+        ept.is_strictly_private
+      FROM external_data_providers edp
+      LEFT JOIN external_provider_types ept ON edp.provider_type = ept.id
+      WHERE edp.id = $1`,
       [providerId]
     );
     const data = result.rows[0];
@@ -259,23 +300,47 @@ async function getExternalDataProviderById(providerId) {
 
     if (data.encrypted_app_id && data.app_id_iv && data.app_id_tag) {
       try {
-        decryptedAppId = await decrypt(data.encrypted_app_id, data.app_id_iv, data.app_id_tag, ENCRYPTION_KEY);
+        decryptedAppId = await decrypt(
+          data.encrypted_app_id,
+          data.app_id_iv,
+          data.app_id_tag,
+          ENCRYPTION_KEY
+        );
       } catch (e) {
         log('error', 'Error decrypting app_id for provider:', providerId, e);
       }
     }
     if (data.encrypted_app_key && data.app_key_iv && data.app_key_tag) {
       try {
-        decryptedAppKey = await decrypt(data.encrypted_app_key, data.app_key_iv, data.app_key_tag, ENCRYPTION_KEY);
+        decryptedAppKey = await decrypt(
+          data.encrypted_app_key,
+          data.app_key_iv,
+          data.app_key_tag,
+          ENCRYPTION_KEY
+        );
       } catch (e) {
         log('error', 'Error decrypting app_key for provider:', providerId, e);
       }
     }
-    if (data.encrypted_garth_dump && data.garth_dump_iv && data.garth_dump_tag) {
+    if (
+      data.encrypted_garth_dump &&
+      data.garth_dump_iv &&
+      data.garth_dump_tag
+    ) {
       try {
-        decryptedGarthDump = await decrypt(data.encrypted_garth_dump, data.garth_dump_iv, data.garth_dump_tag, ENCRYPTION_KEY);
+        decryptedGarthDump = await decrypt(
+          data.encrypted_garth_dump,
+          data.garth_dump_iv,
+          data.garth_dump_tag,
+          ENCRYPTION_KEY
+        );
       } catch (e) {
-        log('error', 'Error decrypting garth_dump for provider:', providerId, e);
+        log(
+          'error',
+          'Error decrypting garth_dump for provider:',
+          providerId,
+          e
+        );
       }
     }
 
@@ -292,29 +357,42 @@ async function getExternalDataProviderById(providerId) {
       app_key: decryptedAppKey,
       token_expires_at: data.token_expires_at,
       external_user_id: data.external_user_id,
-      garth_dump: decryptedGarthDump
+      garth_dump: decryptedGarthDump,
+      is_strictly_private: !!data.is_strictly_private,
     };
   } finally {
     client.release();
   }
 }
 
-async function getExternalDataProviderByUserIdAndProviderName(userId, providerName) {
+async function getExternalDataProviderByUserIdAndProviderName(
+  userId,
+  providerName
+) {
   const client = await getClient(userId); // User-specific operation
   try {
-    log('debug', `Fetching external data provider for user ${userId} and provider ${providerName}`);
+    log(
+      'debug',
+      `Fetching external data provider for user ${userId} and provider ${providerName}`
+    );
     const result = await client.query(
       `SELECT
-        id, provider_name, provider_type, encrypted_app_id, app_id_iv, app_id_tag,
-        encrypted_app_key, app_key_iv, app_key_tag,
-        token_expires_at, external_user_id, is_active, base_url, shared_with_public, updated_at,
-        encrypted_garth_dump, garth_dump_iv, garth_dump_tag
-      FROM external_data_providers WHERE provider_name = $1`,
+        edp.id, edp.provider_name, edp.provider_type, edp.user_id, edp.sync_frequency, edp.encrypted_app_id, edp.app_id_iv, edp.app_id_tag,
+        edp.encrypted_app_key, edp.app_key_iv, edp.app_key_tag,
+        edp.token_expires_at, edp.external_user_id, edp.is_active, edp.base_url, edp.shared_with_public, edp.updated_at,
+        edp.encrypted_garth_dump, edp.garth_dump_iv, edp.garth_dump_tag,
+        ept.is_strictly_private
+      FROM external_data_providers edp
+      LEFT JOIN external_provider_types ept ON edp.provider_type = ept.id
+      WHERE edp.provider_name = $1`,
       [providerName]
     );
     const data = result.rows[0];
     if (!data) {
-      log('debug', `No external data provider found for user ${userId} and provider ${providerName}`);
+      log(
+        'debug',
+        `No external data provider found for user ${userId} and provider ${providerName}`
+      );
       return null;
     }
 
@@ -324,21 +402,40 @@ async function getExternalDataProviderByUserIdAndProviderName(userId, providerNa
 
     if (data.encrypted_app_id && data.app_id_iv && data.app_id_tag) {
       try {
-        decryptedAppId = await decrypt(data.encrypted_app_id, data.app_id_iv, data.app_id_tag, ENCRYPTION_KEY);
+        decryptedAppId = await decrypt(
+          data.encrypted_app_id,
+          data.app_id_iv,
+          data.app_id_tag,
+          ENCRYPTION_KEY
+        );
       } catch (e) {
         log('error', 'Error decrypting app_id for provider:', data.id, e);
       }
     }
     if (data.encrypted_app_key && data.app_key_iv && data.app_key_tag) {
       try {
-        decryptedAppKey = await decrypt(data.encrypted_app_key, data.app_key_iv, data.app_key_tag, ENCRYPTION_KEY);
+        decryptedAppKey = await decrypt(
+          data.encrypted_app_key,
+          data.app_key_iv,
+          data.app_key_tag,
+          ENCRYPTION_KEY
+        );
       } catch (e) {
         log('error', 'Error decrypting app_key for provider:', data.id, e);
       }
     }
-    if (data.encrypted_garth_dump && data.garth_dump_iv && data.garth_dump_tag) {
+    if (
+      data.encrypted_garth_dump &&
+      data.garth_dump_iv &&
+      data.garth_dump_tag
+    ) {
       try {
-        decryptedGarthDump = await decrypt(data.encrypted_garth_dump, data.garth_dump_iv, data.garth_dump_tag, ENCRYPTION_KEY);
+        decryptedGarthDump = await decrypt(
+          data.encrypted_garth_dump,
+          data.garth_dump_iv,
+          data.garth_dump_tag,
+          ENCRYPTION_KEY
+        );
       } catch (e) {
         log('error', 'Error decrypting garth_dump for provider:', data.id, e);
       }
@@ -358,7 +455,8 @@ async function getExternalDataProviderByUserIdAndProviderName(userId, providerNa
       token_expires_at: data.token_expires_at,
       external_user_id: data.external_user_id,
       garth_dump: decryptedGarthDump,
-      updated_at: data.updated_at // Include updated_at
+      updated_at: data.updated_at, // Include updated_at
+      is_strictly_private: !!data.is_strictly_private,
     };
   } finally {
     client.release();
@@ -377,7 +475,7 @@ async function checkExternalDataProviderOwnership(providerId, userId) {
     client.release();
   }
 }
- 
+
 async function deleteExternalDataProvider(id, userId) {
   // Use a user-scoped client so RLS will prevent unauthorized deletions
   const client = await getClient(userId);

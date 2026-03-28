@@ -1,16 +1,28 @@
 # Stage 1: Build the React application
 FROM node:20-slim AS builder
-WORKDIR /app/SparkyFitnessFrontend
+WORKDIR /app
 
-# Copy package files and install dependencies
-COPY SparkyFitnessFrontend/package.json SparkyFitnessFrontend/package-lock.json ./
-RUN npm install
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
-# Copy the rest of the application source code
-COPY SparkyFitnessFrontend .
+# Copy global lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy all workspace member package.json files for dependency graph resolution
+COPY SparkyFitnessServer/package.json ./SparkyFitnessServer/
+COPY SparkyFitnessFrontend/package.json ./SparkyFitnessFrontend/
+COPY SparkyFitnessMobile/package.json ./SparkyFitnessMobile/
+COPY shared/package.json ./shared/
+
+
+RUN pnpm install --frozen-lockfile
+
+# Copy the frontend and shared source code
+COPY SparkyFitnessFrontend/ ./SparkyFitnessFrontend/
+COPY shared/ ./shared/
 
 # Build the application
-RUN npm run build
+RUN pnpm --filter sparkyfitnessfrontend run build
 
 # Stage 2: Serve the application with Nginx
 FROM nginx:alpine3.22
@@ -31,12 +43,13 @@ RUN chmod +x /docker-entrypoint.sh
 # Set default values for environment variables
 ENV SPARKY_FITNESS_SERVER_HOST=sparkyfitness-server
 ENV SPARKY_FITNESS_SERVER_PORT=3010
+ENV NGINX_RATE_LIMIT=5r/s
 
 # Expose port 80
 EXPOSE 80
 
 # Healthcheck
-HEALTHCHECK --interval=5s --timeout=10s --retries=5 CMD ["curl", "http://127.0.0.1"]
+HEALTHCHECK --interval=5s --timeout=10s --retries=5 CMD ["curl", "-f", "http://127.0.0.1"]
 
 # Start with our custom entrypoint
 CMD ["/docker-entrypoint.sh"]

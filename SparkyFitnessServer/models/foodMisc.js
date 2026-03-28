@@ -1,10 +1,10 @@
-const { getClient, getSystemClient } = require("../db/poolManager");
+const { getClient, getSystemClient } = require('../db/poolManager');
 
 async function getFoodDataProviderById(providerId) {
   const client = await getSystemClient(); // System-level operation
   try {
     const result = await client.query(
-      "SELECT * FROM external_data_providers WHERE id = $1",
+      'SELECT * FROM external_data_providers WHERE id = $1',
       [providerId]
     );
     return result.rows[0];
@@ -17,10 +17,10 @@ async function getRecentFoods(userId, limit, mealType) {
   const client = await getClient(userId); // User-specific operation
 
   const queryParams = [userId];
-  let mealTypeCondition = "";
+  let mealTypeCondition = '';
   if (mealType) {
     queryParams.push(mealType);
-    mealTypeCondition = `AND fe.meal_type = $${queryParams.length}`;
+    mealTypeCondition = `AND (LOWER(mt.name) = LOWER($${queryParams.length}) OR fe.meal_type_id::text = $${queryParams.length})`;
   }
   queryParams.push(limit);
 
@@ -31,6 +31,7 @@ async function getRecentFoods(userId, limit, mealType) {
           fe.food_id,
           MAX(fe.entry_date) AS last_used_date
         FROM food_entries fe
+        LEFT JOIN meal_types mt ON fe.meal_type_id = mt.id 
         WHERE fe.user_id = $1 ${mealTypeCondition}
         GROUP BY fe.food_id
         ORDER BY last_used_date DESC
@@ -67,7 +68,8 @@ async function getRecentFoods(userId, limit, mealType) {
           'calcium', fv.calcium,
           'iron', fv.iron,
           'is_default', fv.is_default,
-          'glycemic_index', fv.glycemic_index
+          'glycemic_index', fv.glycemic_index,
+          'custom_nutrients', fv.custom_nutrients
         ) AS default_variant
       FROM foods f
       JOIN RecentFoodEntries rfe ON f.id = rfe.food_id
@@ -86,10 +88,10 @@ async function getTopFoods(userId, limit, mealType) {
   const client = await getClient(userId); // User-specific operation
 
   const queryParams = [userId];
-  let mealTypeCondition = "";
+  let mealTypeCondition = '';
   if (mealType) {
     queryParams.push(mealType);
-    mealTypeCondition = `AND fe.meal_type = $${queryParams.length}`;
+    mealTypeCondition = `AND (LOWER(mt.name) = LOWER($${queryParams.length}) OR fe.meal_type_id::text = $${queryParams.length})`;
   }
   queryParams.push(limit);
 
@@ -100,6 +102,7 @@ async function getTopFoods(userId, limit, mealType) {
           fe.food_id,
           COUNT(fe.food_id) AS usage_count
         FROM food_entries fe
+        LEFT JOIN meal_types mt ON fe.meal_type_id = mt.id
         WHERE fe.user_id = $1 ${mealTypeCondition}
         GROUP BY fe.food_id
         ORDER BY usage_count DESC
@@ -137,7 +140,8 @@ async function getTopFoods(userId, limit, mealType) {
           'calcium', fv.calcium,
           'iron', fv.iron,
           'is_default', fv.is_default,
-          'glycemic_index', fv.glycemic_index
+          'glycemic_index', fv.glycemic_index,
+          'custom_nutrients', fv.custom_nutrients
         ) AS default_variant
       FROM foods f
       JOIN TopFoodEntries tfe ON f.id = tfe.food_id
@@ -157,11 +161,26 @@ async function getDailyNutritionSummary(userId, date) {
   try {
     const result = await client.query(
       `SELECT
-        SUM(fe.calories * fe.quantity / fe.serving_size) AS total_calories,
-        SUM(fe.protein * fe.quantity / fe.serving_size) AS total_protein,
-        SUM(fe.carbs * fe.quantity / fe.serving_size) AS total_carbs,
-        SUM(fe.fat * fe.quantity / fe.serving_size) AS total_fat,
-        SUM(fe.dietary_fiber * fe.quantity / fe.serving_size) AS total_dietary_fiber
+        COALESCE(SUM(fe.calories * fe.quantity / NULLIF(fe.serving_size, 0)), 0) AS total_calories,
+        COALESCE(SUM(fe.protein * fe.quantity / NULLIF(fe.serving_size, 0)), 0) AS total_protein,
+        COALESCE(SUM(fe.carbs * fe.quantity / NULLIF(fe.serving_size, 0)), 0) AS total_carbs,
+        COALESCE(SUM(fe.fat * fe.quantity / NULLIF(fe.serving_size, 0)), 0) AS total_fat,
+        COALESCE(SUM(fe.dietary_fiber * fe.quantity / NULLIF(fe.serving_size, 0)), 0) AS total_dietary_fiber,
+        COALESCE(
+          (
+            SELECT jsonb_object_agg(key, value)
+            FROM (
+              SELECT
+                key,
+                SUM((NULLIF(TRIM(value), '')::numeric) * fe2.quantity / NULLIF(fe2.serving_size, 0)) as value
+              FROM food_entries fe2
+              CROSS JOIN LATERAL jsonb_each_text(fe2.custom_nutrients)
+              WHERE fe2.user_id = $1 AND fe2.entry_date = $2
+              GROUP BY key
+            ) custom_agg
+          ),
+          '{}'::jsonb
+        ) AS total_custom_nutrients
        FROM food_entries fe
        WHERE fe.user_id = $1 AND fe.entry_date = $2`,
       [userId, date]
@@ -202,7 +221,12 @@ async function getFoodsNeedingReview(userId) {
   }
 }
 
-async function updateFoodEntriesSnapshot(userId, foodId, variantId, newSnapshotData) {
+async function updateFoodEntriesSnapshot(
+  userId,
+  foodId,
+  variantId,
+  newSnapshotData
+) {
   const client = await getClient(userId); // User-specific operation
   try {
     const result = await client.query(
@@ -230,8 +254,8 @@ async function updateFoodEntriesSnapshot(userId, foodId, variantId, newSnapshotD
           calcium = $20,
           iron = $21,
           glycemic_index = $22,
-          updated_at = now()
-       WHERE user_id = $23 AND food_id = $24 AND variant_id = $25
+          custom_nutrients = $23
+       WHERE user_id = $24 AND food_id = $25 AND variant_id = $26
        RETURNING id`,
       [
         newSnapshotData.food_name,
@@ -256,6 +280,7 @@ async function updateFoodEntriesSnapshot(userId, foodId, variantId, newSnapshotD
         newSnapshotData.calcium,
         newSnapshotData.iron,
         newSnapshotData.glycemic_index,
+        newSnapshotData.custom_nutrients || {},
         userId,
         foodId,
         variantId,

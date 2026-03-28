@@ -1,15 +1,119 @@
-const { getClient, getSystemClient } = require("../db/poolManager");
-const { log } = require("../config/logging");
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     NutritionSummary:
+ *       type: object
+ *       properties:
+ *         total_calories:
+ *           type: number
+ *         total_protein:
+ *           type: number
+ *         total_carbs:
+ *           type: number
+ *         total_fat:
+ *           type: number
+ *         total_saturated_fat:
+ *           type: number
+ *         total_polyunsaturated_fat:
+ *           type: number
+ *         total_monounsaturated_fat:
+ *           type: number
+ *         total_trans_fat:
+ *           type: number
+ *         total_cholesterol:
+ *           type: number
+ *         total_sodium:
+ *           type: number
+ *         total_potassium:
+ *           type: number
+ *         total_dietary_fiber:
+ *           type: number
+ *         total_sugars:
+ *           type: number
+ *         total_vitamin_a:
+ *           type: number
+ *         total_vitamin_c:
+ *           type: number
+ *         total_calcium:
+ *           type: number
+ *         total_iron:
+ *           type: number
+ */
+const { getClient, getSystemClient } = require('../db/poolManager');
+const { log } = require('../config/logging');
+const { normalizeBarcode } = require('../utils/foodUtils');
 
 function sanitizeGlycemicIndex(gi) {
-  const allowedGICategories = ['None', 'Very Low', 'Low', 'Medium', 'High', 'Very High'];
-  if (gi === "0" || gi === "0.0" || gi === null || gi === undefined || gi === '' || !allowedGICategories.includes(gi)) {
+  const allowedGICategories = [
+    'None',
+    'Very Low',
+    'Low',
+    'Medium',
+    'High',
+    'Very High',
+  ];
+  if (
+    gi === '0' ||
+    gi === '0.0' ||
+    gi === null ||
+    gi === undefined ||
+    gi === '' ||
+    !allowedGICategories.includes(gi)
+  ) {
     return null;
   }
   return gi;
 }
 
-async function searchFoods(name, userId, exactMatch, broadMatch, checkCustom, limit = 10) {
+function sanitizeNumeric(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    value === 'NULL'
+  ) {
+    return null;
+  }
+  // Strip quotes if they exist (common in CSV issues)
+  let sanitizedValue = value;
+  if (typeof value === 'string') {
+    sanitizedValue = value.replace(/^["']|["']$/g, '');
+  }
+  const num = parseFloat(sanitizedValue);
+  return isNaN(num) ? null : num;
+}
+
+function sanitizeBoolean(value) {
+  if (
+    value === true ||
+    value === 'TRUE' ||
+    value === 't' ||
+    value === '1' ||
+    value === 1
+  ) {
+    return true;
+  }
+  if (
+    value === false ||
+    value === 'FALSE' ||
+    value === 'f' ||
+    value === '0' ||
+    value === 0
+  ) {
+    return false;
+  }
+  return null;
+}
+
+async function searchFoods(
+  name,
+  userId,
+  exactMatch,
+  broadMatch,
+  checkCustom,
+  limit = 10
+) {
   const client = await getClient(userId); // User-specific operation
   try {
     let query = `
@@ -37,7 +141,8 @@ async function searchFoods(name, userId, exactMatch, broadMatch, checkCustom, li
           'calcium', fv.calcium,
           'iron', fv.iron,
           'is_default', fv.is_default,
-          'glycemic_index', fv.glycemic_index
+          'glycemic_index', fv.glycemic_index,
+          'custom_nutrients', fv.custom_nutrients
         ) AS default_variant
       FROM foods f
       LEFT JOIN food_variants fv ON f.id = fv.food_id AND fv.is_default = TRUE
@@ -55,7 +160,7 @@ async function searchFoods(name, userId, exactMatch, broadMatch, checkCustom, li
       query += `f.name = $${paramIndex++}`;
       queryParams.push(name);
     } else {
-      throw new Error("Invalid search parameters.");
+      throw new Error('Invalid search parameters.');
     }
 
     query += ` LIMIT $${paramIndex++}`;
@@ -70,23 +175,25 @@ async function searchFoods(name, userId, exactMatch, broadMatch, checkCustom, li
 async function createFood(foodData) {
   const client = await getClient(foodData.user_id); // User-specific operation
   try {
-    await client.query("BEGIN"); // Start transaction
+    await client.query('BEGIN'); // Start transaction
 
     // 1. Create the food entry
     const foodResult = await client.query(
       `INSERT INTO foods (
         name, is_custom, user_id, brand, barcode, provider_external_id, shared_with_public, provider_type, is_quick_food, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now()) RETURNING id, name, brand, is_custom, user_id, shared_with_public, is_quick_food`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now()) RETURNING id, name, brand, is_custom, user_id, shared_with_public, is_quick_food, provider_external_id, provider_type`,
       [
         foodData.name,
-        foodData.is_custom,
+        sanitizeBoolean(foodData.is_custom) ?? true,
         foodData.user_id,
         foodData.brand,
-        foodData.barcode,
+        foodData.barcode
+          ? normalizeBarcode(foodData.barcode)
+          : foodData.barcode,
         foodData.provider_external_id,
-        foodData.shared_with_public,
+        sanitizeBoolean(foodData.shared_with_public) ?? false,
         foodData.provider_type,
-        foodData.is_quick_food || false,
+        sanitizeBoolean(foodData.is_quick_food) ?? false,
       ]
     );
     const newFood = foodResult.rows[0];
@@ -97,35 +204,36 @@ async function createFood(foodData) {
         food_id, serving_size, serving_unit, calories, protein, carbs, fat,
         saturated_fat, polyunsaturated_fat, monounsaturated_fat, trans_fat,
         cholesterol, sodium, potassium, dietary_fiber, sugars,
-        vitamin_a, vitamin_c, calcium, iron, is_default, glycemic_index, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, TRUE, $21, now(), now()) RETURNING id`,
+        vitamin_a, vitamin_c, calcium, iron, is_default, glycemic_index, custom_nutrients, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, TRUE, $21, $22, now(), now()) RETURNING id`,
       [
         newFood.id,
-        foodData.serving_size,
+        sanitizeNumeric(foodData.serving_size),
         foodData.serving_unit,
-        foodData.calories,
-        foodData.protein,
-        foodData.carbs,
-        foodData.fat,
-        foodData.saturated_fat,
-        foodData.polyunsaturated_fat,
-        foodData.monounsaturated_fat,
-        foodData.trans_fat,
-        foodData.cholesterol,
-        foodData.sodium,
-        foodData.potassium,
-        foodData.dietary_fiber,
-        foodData.sugars,
-        foodData.vitamin_a,
-        foodData.vitamin_c,
-        foodData.calcium,
-        foodData.iron,
+        sanitizeNumeric(foodData.calories),
+        sanitizeNumeric(foodData.protein),
+        sanitizeNumeric(foodData.carbs),
+        sanitizeNumeric(foodData.fat),
+        sanitizeNumeric(foodData.saturated_fat),
+        sanitizeNumeric(foodData.polyunsaturated_fat),
+        sanitizeNumeric(foodData.monounsaturated_fat),
+        sanitizeNumeric(foodData.trans_fat),
+        sanitizeNumeric(foodData.cholesterol),
+        sanitizeNumeric(foodData.sodium),
+        sanitizeNumeric(foodData.potassium),
+        sanitizeNumeric(foodData.dietary_fiber),
+        sanitizeNumeric(foodData.sugars),
+        sanitizeNumeric(foodData.vitamin_a),
+        sanitizeNumeric(foodData.vitamin_c),
+        sanitizeNumeric(foodData.calcium),
+        sanitizeNumeric(foodData.iron),
         sanitizeGlycemicIndex(foodData.glycemic_index),
+        foodData.custom_nutrients || {},
       ]
     );
     const newVariantId = variantResult.rows[0].id;
 
-    await client.query("COMMIT"); // Commit transaction
+    await client.query('COMMIT'); // Commit transaction
 
     // Return the new food with its default variant details
     return {
@@ -152,22 +260,24 @@ async function createFood(foodData) {
         calcium: foodData.calcium,
         iron: foodData.iron,
         is_default: true,
+        custom_nutrients: foodData.custom_nutrients || {},
       },
     };
   } catch (error) {
-    await client.query("ROLLBACK"); // Rollback transaction on error
+    await client.query('ROLLBACK'); // Rollback transaction on error
     throw error;
   } finally {
     client.release();
   }
 }
 
-async function getFoodById(foodId, userId) {
-  const client = await getClient(userId); // User-specific operation (RLS will handle access)
+async function findFoodByBarcode(barcode, userId) {
+  barcode = normalizeBarcode(barcode);
+  const client = await getClient(userId);
   try {
     const result = await client.query(
       `SELECT
-        f.id, f.name, f.brand, f.is_custom, f.user_id, f.shared_with_public,
+        f.id, f.name, f.brand, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type,
         json_build_object(
           'id', fv.id,
           'serving_size', fv.serving_size,
@@ -190,7 +300,51 @@ async function getFoodById(foodId, userId) {
           'calcium', fv.calcium,
           'iron', fv.iron,
           'is_default', fv.is_default,
-          'glycemic_index', fv.glycemic_index
+          'glycemic_index', fv.glycemic_index,
+          'custom_nutrients', fv.custom_nutrients
+        ) AS default_variant
+      FROM foods f
+      LEFT JOIN food_variants fv ON f.id = fv.food_id AND fv.is_default = TRUE
+      WHERE f.barcode = $1 AND f.user_id = $2
+      LIMIT 1`,
+      [barcode, userId]
+    );
+    return result.rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
+async function getFoodById(foodId, userId) {
+  const client = await getClient(userId); // User-specific operation (RLS will handle access)
+  try {
+    const result = await client.query(
+      `SELECT
+        f.id, f.name, f.brand, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type,
+        json_build_object(
+          'id', fv.id,
+          'serving_size', fv.serving_size,
+          'serving_unit', fv.serving_unit,
+          'calories', fv.calories,
+          'protein', fv.protein,
+          'carbs', fv.carbs,
+          'fat', fv.fat,
+          'saturated_fat', fv.saturated_fat,
+          'polyunsaturated_fat', fv.polyunsaturated_fat,
+          'monounsaturated_fat', fv.monounsaturated_fat,
+          'trans_fat', fv.trans_fat,
+          'cholesterol', fv.cholesterol,
+          'sodium', fv.sodium,
+          'potassium', fv.potassium,
+          'dietary_fiber', fv.dietary_fiber,
+          'sugars', fv.sugars,
+          'vitamin_a', fv.vitamin_a,
+          'vitamin_c', fv.vitamin_c,
+          'calcium', fv.calcium,
+          'iron', fv.iron,
+          'is_default', fv.is_default,
+          'glycemic_index', fv.glycemic_index,
+          'custom_nutrients', fv.custom_nutrients
         ) AS default_variant
       FROM foods f
       LEFT JOIN food_variants fv ON f.id = fv.food_id AND fv.is_default = TRUE
@@ -207,11 +361,11 @@ async function getFoodOwnerId(foodId, userId) {
   const client = await getClient(userId); // User-specific operation (RLS will handle access)
   try {
     const foodResult = await client.query(
-      "SELECT user_id FROM foods WHERE id = $1",
+      'SELECT user_id FROM foods WHERE id = $1',
       [foodId]
     );
     const ownerId = foodResult.rows[0]?.user_id;
-    log("info", `getFoodOwnerId: Food ID ${foodId} owner: ${ownerId}`);
+    log('info', `getFoodOwnerId: Food ID ${foodId} owner: ${ownerId}`);
     return ownerId;
   } finally {
     client.release();
@@ -238,7 +392,9 @@ async function updateFood(id, userId, foodData) {
         foodData.name,
         foodData.is_custom,
         foodData.brand,
-        foodData.barcode,
+        foodData.barcode
+          ? normalizeBarcode(foodData.barcode)
+          : foodData.barcode,
         foodData.provider_external_id,
         foodData.shared_with_public,
         foodData.provider_type,
@@ -256,7 +412,7 @@ async function deleteFood(id, userId) {
   const client = await getClient(userId); // User-specific operation
   try {
     const result = await client.query(
-      "DELETE FROM foods WHERE id = $1 RETURNING id",
+      'DELETE FROM foods WHERE id = $1 RETURNING id',
       [id]
     );
     return result.rowCount > 0;
@@ -275,7 +431,7 @@ async function getFoodsWithPagination(
 ) {
   const client = await getClient(authenticatedUserId); // User-specific operation
   try {
-    let whereClauses = ["f.is_quick_food = FALSE"];
+    const whereClauses = ['f.is_quick_food = FALSE'];
     const queryParams = [];
     let paramIndex = 1;
 
@@ -289,7 +445,7 @@ async function getFoodsWithPagination(
 
     let query = `
       SELECT
-        f.id, f.name, f.brand, f.is_custom, f.user_id, f.shared_with_public,
+        f.id, f.name, f.brand, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type,
         json_build_object(
           'id', fv.id,
           'serving_size', fv.serving_size,
@@ -312,27 +468,33 @@ async function getFoodsWithPagination(
           'calcium', fv.calcium,
           'iron', fv.iron,
           'is_default', fv.is_default,
-          'glycemic_index', fv.glycemic_index
+          'glycemic_index', fv.glycemic_index,
+          'custom_nutrients', fv.custom_nutrients
         ) AS default_variant
       FROM foods f
       LEFT JOIN food_variants fv ON f.id = fv.food_id AND fv.is_default = TRUE
-      WHERE ${whereClauses.join(" AND ")}
+      WHERE ${whereClauses.join(' AND ')}
     `;
 
-    let orderByClause = "name ASC";
+    let orderByClause = 'f.name ASC, f.id ASC';
     if (sortBy) {
-      const [sortField, sortOrder] = sortBy.split(":");
-      const allowedSortFields = ["name", "calories", "protein", "carbs", "fat"];
-      const allowedSortOrders = ["asc", "desc"];
+      const [sortField, sortOrder] = sortBy.split(':');
+      const nutritionSortFields = ['calories', 'protein', 'carbs', 'fat'];
+      const allowedSortFields = ['name', ...nutritionSortFields];
+      const allowedSortOrders = ['asc', 'desc'];
 
       if (
         allowedSortFields.includes(sortField) &&
         allowedSortOrders.includes(sortOrder)
       ) {
-        orderByClause = `${sortField} ${sortOrder.toUpperCase()}`;
+        if (nutritionSortFields.includes(sortField)) {
+          orderByClause = `fv.${sortField} ${sortOrder.toUpperCase()} NULLS LAST, f.name ASC, f.id ASC`;
+        } else {
+          orderByClause = `f.${sortField} ${sortOrder.toUpperCase()}, f.id ASC`;
+        }
       } else {
         log(
-          "warn",
+          'warn',
           `Invalid sortBy parameter received: ${sortBy}. Using default sort.`
         );
       }
@@ -352,7 +514,7 @@ async function getFoodsWithPagination(
 async function countFoods(searchTerm, foodFilter, authenticatedUserId) {
   const client = await getClient(authenticatedUserId); // User-specific operation
   try {
-    let whereClauses = ["is_quick_food = FALSE"];
+    const whereClauses = ['is_quick_food = FALSE'];
     const countQueryParams = [];
     let paramIndex = 1;
 
@@ -367,53 +529,10 @@ async function countFoods(searchTerm, foodFilter, authenticatedUserId) {
     const countQuery = `
       SELECT COUNT(*)
       FROM foods
-      WHERE ${whereClauses.join(" AND ")}
+      WHERE ${whereClauses.join(' AND ')}
     `;
     const countResult = await client.query(countQuery, countQueryParams);
     return parseInt(countResult.rows[0].count, 10);
-  } finally {
-    client.release();
-  }
-}
-
-async function findFoodByNameAndBrand(name, brand, userId) {
-  const client = await getClient(userId); // User-specific operation
-  try {
-    const result = await client.query(
-      `SELECT
-        f.id, f.name, f.brand, f.is_custom, f.user_id, f.shared_with_public,
-        fv.serving_size, fv.serving_unit, fv.calories, fv.protein, fv.carbs, fv.fat,
-        json_build_object(
-          'id', fv.id,
-          'serving_size', fv.serving_size,
-          'serving_unit', fv.serving_unit,
-          'calories', fv.calories,
-          'protein', fv.protein,
-          'carbs', fv.carbs,
-          'fat', fv.fat,
-          'saturated_fat', fv.saturated_fat,
-          'polyunsaturated_fat', fv.polyunsaturated_fat,
-          'monounsaturated_fat', fv.monounsaturated_fat,
-          'trans_fat', fv.trans_fat,
-          'cholesterol', fv.cholesterol,
-          'sodium', fv.sodium,
-          'potassium', fv.potassium,
-          'dietary_fiber', fv.dietary_fiber,
-          'sugars', fv.sugars,
-          'vitamin_a', fv.vitamin_a,
-          'vitamin_c', fv.vitamin_c,
-          'calcium', fv.calcium,
-          'iron', fv.iron,
-          'is_default', fv.is_default,
-          'glycemic_index', fv.glycemic_index
-        ) AS default_variant
-       FROM foods f
-       LEFT JOIN food_variants fv ON f.id = fv.food_id AND fv.is_default = TRUE
-       WHERE f.name ILIKE $1 AND (f.brand IS NULL OR f.brand ILIKE $2)
-         AND (f.is_custom = FALSE)`,
-      [name, brand || null]
-    );
-    return result.rows[0];
   } finally {
     client.release();
   }
@@ -425,30 +544,57 @@ async function getFoodDeletionImpact(foodId, authenticatedUserId) {
   try {
     // Check if the food is publicly shared (using systemClient to bypass RLS)
     const publicFoodResult = await systemClient.query(
-      "SELECT shared_with_public FROM foods WHERE id = $1",
+      'SELECT shared_with_public FROM foods WHERE id = $1',
       [foodId]
     );
-    const isPubliclyShared = publicFoodResult.rows[0]?.shared_with_public || false;
+    const isPubliclyShared =
+      publicFoodResult.rows[0]?.shared_with_public || false;
 
     // Get food owner ID (using systemClient to bypass RLS)
     const foodOwnerResult = await systemClient.query(
-      "SELECT user_id FROM foods WHERE id = $1",
+      'SELECT user_id FROM foods WHERE id = $1',
       [foodId]
     );
     const foodOwnerId = foodOwnerResult.rows[0]?.user_id;
 
     // Count references by the authenticated user (using client with RLS)
     const currentUserReferencesQueries = [
-      client.query("SELECT COUNT(*) FROM food_entries WHERE food_id = $1 AND user_id = $2", [foodId, authenticatedUserId]),
-      client.query("SELECT COUNT(*) FROM meal_foods mf JOIN meals m ON mf.meal_id = m.id WHERE mf.food_id = $1 AND m.user_id = $2", [foodId, authenticatedUserId]),
-      client.query("SELECT COUNT(*) FROM meal_plans mp WHERE mp.food_id = $1 AND mp.user_id = $2", [foodId, authenticatedUserId]),
-      client.query("SELECT COUNT(*) FROM meal_plan_template_assignments mpta JOIN meal_plan_templates mpt ON mpta.template_id = mpt.id WHERE mpta.food_id = $1 AND mpt.user_id = $2", [foodId, authenticatedUserId]),
+      client.query(
+        'SELECT COUNT(*) FROM food_entries WHERE food_id = $1 AND user_id = $2',
+        [foodId, authenticatedUserId]
+      ),
+      client.query(
+        'SELECT COUNT(*) FROM meal_foods mf JOIN meals m ON mf.meal_id = m.id WHERE mf.food_id = $1 AND m.user_id = $2',
+        [foodId, authenticatedUserId]
+      ),
+      client.query(
+        'SELECT COUNT(*) FROM meal_plans mp WHERE mp.food_id = $1 AND mp.user_id = $2',
+        [foodId, authenticatedUserId]
+      ),
+      client.query(
+        'SELECT COUNT(*) FROM meal_plan_template_assignments mpta JOIN meal_plan_templates mpt ON mpta.template_id = mpt.id WHERE mpta.food_id = $1 AND mpt.user_id = $2',
+        [foodId, authenticatedUserId]
+      ),
     ];
-    const currentUserReferencesResults = await Promise.all(currentUserReferencesQueries);
-    const currentUserFoodEntriesCount = parseInt(currentUserReferencesResults[0].rows[0].count, 10);
-    const currentUserMealFoodsCount = parseInt(currentUserReferencesResults[1].rows[0].count, 10);
-    const currentUserMealPlansCount = parseInt(currentUserReferencesResults[2].rows[0].count, 10);
-    const currentUserMealPlanTemplateAssignmentsCount = parseInt(currentUserReferencesResults[3].rows[0].count, 10);
+    const currentUserReferencesResults = await Promise.all(
+      currentUserReferencesQueries
+    );
+    const currentUserFoodEntriesCount = parseInt(
+      currentUserReferencesResults[0].rows[0].count,
+      10
+    );
+    const currentUserMealFoodsCount = parseInt(
+      currentUserReferencesResults[1].rows[0].count,
+      10
+    );
+    const currentUserMealPlansCount = parseInt(
+      currentUserReferencesResults[2].rows[0].count,
+      10
+    );
+    const currentUserMealPlanTemplateAssignmentsCount = parseInt(
+      currentUserReferencesResults[3].rows[0].count,
+      10
+    );
 
     const currentUserReferences =
       currentUserFoodEntriesCount +
@@ -458,16 +604,42 @@ async function getFoodDeletionImpact(foodId, authenticatedUserId) {
 
     // Count references by other users (excluding the authenticated user) (using systemClient to bypass RLS)
     const otherUserReferencesQueries = [
-      systemClient.query("SELECT COUNT(*) FROM food_entries WHERE food_id = $1 AND user_id != $2", [foodId, authenticatedUserId]),
-      systemClient.query("SELECT COUNT(*) FROM meal_foods mf JOIN meals m ON mf.meal_id = m.id WHERE mf.food_id = $1 AND m.user_id != $2", [foodId, authenticatedUserId]),
-      systemClient.query("SELECT COUNT(*) FROM meal_plans mp WHERE mp.food_id = $1 AND mp.user_id != $2", [foodId, authenticatedUserId]),
-      systemClient.query("SELECT COUNT(*) FROM meal_plan_template_assignments mpta JOIN meal_plan_templates mpt ON mpta.template_id = mpt.id WHERE mpta.food_id = $1 AND mpt.user_id != $2", [foodId, authenticatedUserId]),
+      systemClient.query(
+        'SELECT COUNT(*) FROM food_entries WHERE food_id = $1 AND user_id != $2',
+        [foodId, authenticatedUserId]
+      ),
+      systemClient.query(
+        'SELECT COUNT(*) FROM meal_foods mf JOIN meals m ON mf.meal_id = m.id WHERE mf.food_id = $1 AND m.user_id != $2',
+        [foodId, authenticatedUserId]
+      ),
+      systemClient.query(
+        'SELECT COUNT(*) FROM meal_plans mp WHERE mp.food_id = $1 AND mp.user_id != $2',
+        [foodId, authenticatedUserId]
+      ),
+      systemClient.query(
+        'SELECT COUNT(*) FROM meal_plan_template_assignments mpta JOIN meal_plan_templates mpt ON mpta.template_id = mpt.id WHERE mpta.food_id = $1 AND mpt.user_id != $2',
+        [foodId, authenticatedUserId]
+      ),
     ];
-    const otherUserReferencesResults = await Promise.all(otherUserReferencesQueries);
-    const otherUserFoodEntriesCount = parseInt(otherUserReferencesResults[0].rows[0].count, 10);
-    const otherUserMealFoodsCount = parseInt(otherUserReferencesResults[1].rows[0].count, 10);
-    const otherUserMealPlansCount = parseInt(otherUserReferencesResults[2].rows[0].count, 10);
-    const otherUserMealPlanTemplateAssignmentsCount = parseInt(otherUserReferencesResults[3].rows[0].count, 10);
+    const otherUserReferencesResults = await Promise.all(
+      otherUserReferencesQueries
+    );
+    const otherUserFoodEntriesCount = parseInt(
+      otherUserReferencesResults[0].rows[0].count,
+      10
+    );
+    const otherUserMealFoodsCount = parseInt(
+      otherUserReferencesResults[1].rows[0].count,
+      10
+    );
+    const otherUserMealPlansCount = parseInt(
+      otherUserReferencesResults[2].rows[0].count,
+      10
+    );
+    const otherUserMealPlanTemplateAssignmentsCount = parseInt(
+      otherUserReferencesResults[3].rows[0].count,
+      10
+    );
 
     const otherUserReferences =
       otherUserFoodEntriesCount +
@@ -478,7 +650,8 @@ async function getFoodDeletionImpact(foodId, authenticatedUserId) {
     // Get users who have family access to this food (if the food owner is the authenticated user)
     let familySharedUsers = [];
     if (foodOwnerId === authenticatedUserId) {
-      const familyAccessResult = await client.query( // Use client with RLS for family access check
+      const familyAccessResult = await client.query(
+        // Use client with RLS for family access check
         `SELECT fa.family_user_id
          FROM family_access fa
          WHERE fa.owner_user_id = $1
@@ -487,14 +660,18 @@ async function getFoodDeletionImpact(foodId, authenticatedUserId) {
            AND (fa.access_permissions->>'diary')::boolean = TRUE`,
         [authenticatedUserId]
       );
-      familySharedUsers = familyAccessResult.rows.map(row => row.family_user_id);
+      familySharedUsers = familyAccessResult.rows.map(
+        (row) => row.family_user_id
+      );
     }
 
     return {
       foodEntriesCount: currentUserFoodEntriesCount + otherUserFoodEntriesCount,
       mealFoodsCount: currentUserMealFoodsCount + otherUserMealFoodsCount,
       mealPlansCount: currentUserMealPlansCount + otherUserMealPlansCount,
-      mealPlanTemplateAssignmentsCount: currentUserMealPlanTemplateAssignmentsCount + otherUserMealPlanTemplateAssignmentsCount,
+      mealPlanTemplateAssignmentsCount:
+        currentUserMealPlanTemplateAssignmentsCount +
+        otherUserMealPlanTemplateAssignmentsCount,
       totalReferences: currentUserReferences + otherUserReferences,
       currentUserReferences: currentUserReferences,
       otherUserReferences: otherUserReferences,
@@ -510,49 +687,76 @@ async function getFoodDeletionImpact(foodId, authenticatedUserId) {
 async function deleteFoodAndDependencies(foodId, userId) {
   const client = await getClient(userId);
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     // 1. Delete food entries referencing this food for the current user
-    await client.query("DELETE FROM food_entries WHERE food_id = $1 AND user_id = $2", [foodId, userId]);
-    log("info", `Deleted food entries for food ${foodId} by user ${userId}`);
+    await client.query(
+      'DELETE FROM food_entries WHERE food_id = $1 AND user_id = $2',
+      [foodId, userId]
+    );
+    log('info', `Deleted food entries for food ${foodId} by user ${userId}`);
 
     // 2. Delete meal_foods referencing this food for meals owned by the current user
-    await client.query(`
+    await client.query(
+      `
       DELETE FROM meal_foods mf
       USING meals m
       WHERE mf.meal_id = m.id
         AND mf.food_id = $1
         AND m.user_id = $2
-    `, [foodId, userId]);
-    log("info", `Deleted meal foods for food ${foodId} in meals by user ${userId}`);
+    `,
+      [foodId, userId]
+    );
+    log(
+      'info',
+      `Deleted meal foods for food ${foodId} in meals by user ${userId}`
+    );
 
     // 3. Delete meal_plans referencing this food for the current user
-    await client.query("DELETE FROM meal_plans WHERE food_id = $1 AND user_id = $2", [foodId, userId]);
-    log("info", `Deleted meal plans for food ${foodId} by user ${userId}`);
+    await client.query(
+      'DELETE FROM meal_plans WHERE food_id = $1 AND user_id = $2',
+      [foodId, userId]
+    );
+    log('info', `Deleted meal plans for food ${foodId} by user ${userId}`);
 
     // 4. Delete meal_plan_template_assignments referencing this food for templates owned by the current user
-    await client.query(`
+    await client.query(
+      `
       DELETE FROM meal_plan_template_assignments mpta
       USING meal_plan_templates mpt
       WHERE mpta.template_id = mpt.id
         AND mpta.food_id = $1
         AND mpt.user_id = $2
-    `, [foodId, userId]);
-    log("info", `Deleted meal plan template assignments for food ${foodId} in templates by user ${userId}`);
+    `,
+      [foodId, userId]
+    );
+    log(
+      'info',
+      `Deleted meal plan template assignments for food ${foodId} in templates by user ${userId}`
+    );
 
     // 5. Delete food variants associated with this food
-    await client.query("DELETE FROM food_variants WHERE food_id = $1", [foodId]);
-    log("info", `Deleted food variants for food ${foodId}`);
+    await client.query('DELETE FROM food_variants WHERE food_id = $1', [
+      foodId,
+    ]);
+    log('info', `Deleted food variants for food ${foodId}`);
 
     // 6. Finally, delete the food itself
-    const result = await client.query("DELETE FROM foods WHERE id = $1 AND user_id = $2 RETURNING id", [foodId, userId]);
-    log("info", `Deleted food ${foodId} by user ${userId}`);
+    const result = await client.query(
+      'DELETE FROM foods WHERE id = $1 AND user_id = $2 RETURNING id',
+      [foodId, userId]
+    );
+    log('info', `Deleted food ${foodId} by user ${userId}`);
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
     return result.rowCount > 0;
   } catch (error) {
-    await client.query("ROLLBACK");
-    log("error", `Error deleting food and dependencies for food ${foodId} by user ${userId}:`, error);
+    await client.query('ROLLBACK');
+    log(
+      'error',
+      `Error deleting food and dependencies for food ${foodId} by user ${userId}:`,
+      error
+    );
     throw error;
   } finally {
     client.release();
@@ -563,7 +767,7 @@ async function createFoodsInBulk(userId, foodDataArray) {
   class DuplicateFoodError extends Error {
     constructor(message, duplicates) {
       super(message);
-      this.name = "DuplicateFoodError";
+      this.name = 'DuplicateFoodError';
       this.duplicates = duplicates;
     }
   }
@@ -589,7 +793,7 @@ async function createFoodsInBulk(userId, foodDataArray) {
   const foodsToCreate = Object.values(groupedFoods);
   if (foodsToCreate.length === 0) {
     return {
-      message: "No food data provided to import.",
+      message: 'No food data provided to import.',
       createdFoods: 0,
       createdVariants: 0,
     };
@@ -610,7 +814,7 @@ async function createFoodsInBulk(userId, foodDataArray) {
       () =>
         `($${placeholderIndex++}::uuid, $${placeholderIndex++}, $${placeholderIndex++})`
     )
-    .join(", ");
+    .join(', ');
 
   const duplicateCheckQuery = `
     SELECT name, brand FROM foods
@@ -620,7 +824,8 @@ async function createFoodsInBulk(userId, foodDataArray) {
   const clientForDuplicateCheck = await getClient(userId);
   let existingFoods = [];
   try {
-    const { rows } = await clientForDuplicateCheck.query( // User-specific check for duplicates
+    const { rows } = await clientForDuplicateCheck.query(
+      // User-specific check for duplicates
       duplicateCheckQuery,
       flatValues
     );
@@ -632,7 +837,7 @@ async function createFoodsInBulk(userId, foodDataArray) {
   if (existingFoods.length > 0) {
     // If duplicates are found, throw an error.
     throw new DuplicateFoodError(
-      `The import was terminated because duplicate entries were found in your food list.`,
+      'The import was terminated because duplicate entries were found in your food list.',
       existingFoods
     );
   }
@@ -640,7 +845,7 @@ async function createFoodsInBulk(userId, foodDataArray) {
   // 3. Database Transaction starts here for Bulk Insert
   const client = await getClient(userId); // User-specific operation
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     let totalFoodsCreated = 0;
     let totalVariantsCreated = 0;
@@ -648,16 +853,16 @@ async function createFoodsInBulk(userId, foodDataArray) {
     for (const food of foodsToCreate) {
       const foodResult = await client.query(
         `INSERT INTO foods (name, brand, is_custom, user_id, shared_with_public, is_quick_food,barcode,provider_external_id,provider_type, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
-         RETURNING id`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
+           RETURNING id`,
         [
           food.name,
           food.brand,
-          food.is_custom,
+          sanitizeBoolean(food.is_custom) ?? true,
           food.user_id,
-          food.shared_with_public,
-          food.is_quick_food,
-          food.barcode || null,
+          sanitizeBoolean(food.shared_with_public) ?? false,
+          sanitizeBoolean(food.is_quick_food) ?? false,
+          (food.barcode && normalizeBarcode(food.barcode)) || null,
           food.provider_external_id || null,
           food.provider_type || null,
         ]
@@ -668,53 +873,54 @@ async function createFoodsInBulk(userId, foodDataArray) {
       for (const variant of food.variants) {
         await client.query(
           `INSERT INTO food_variants (
-            food_id, serving_size, serving_unit, is_default, calories, protein, carbs, fat,
-            saturated_fat, polyunsaturated_fat, monounsaturated_fat, trans_fat,
-            cholesterol, sodium, potassium, dietary_fiber, sugars,
-            vitamin_a, vitamin_c, calcium, iron, glycemic_index, created_at, updated_at
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-            $14, $15, $16, $17, $18, $19, $20, $21, $22, now(), now()
-          )`,
+              food_id, serving_size, serving_unit, is_default, calories, protein, carbs, fat,
+              saturated_fat, polyunsaturated_fat, monounsaturated_fat, trans_fat,
+              cholesterol, sodium, potassium, dietary_fiber, sugars,
+              vitamin_a, vitamin_c, calcium, iron, glycemic_index, custom_nutrients, created_at, updated_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+              $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, now(), now()
+            )`,
           [
             newFoodId,
-            variant.serving_size,
+            sanitizeNumeric(variant.serving_size),
             variant.serving_unit,
-            variant.is_default || true,
-            variant.calories || 0,
-            variant.protein || 0,
-            variant.carbs || 0,
-            variant.fat || 0,
-            variant.saturated_fat || 0,
-            variant.polyunsaturated_fat || 0,
-            variant.monounsaturated_fat || 0,
-            variant.trans_fat || 0,
-            variant.cholesterol || 0,
-            variant.sodium || 0,
-            variant.potassium || 0,
-            variant.dietary_fiber || 0,
-            variant.sugars || 0,
-            variant.vitamin_a || 0,
-            variant.vitamin_c || 0,
-            variant.calcium || 0,
-            variant.iron || 0,
+            sanitizeBoolean(variant.is_default) ?? true,
+            sanitizeNumeric(variant.calories),
+            sanitizeNumeric(variant.protein),
+            sanitizeNumeric(variant.carbs),
+            sanitizeNumeric(variant.fat),
+            sanitizeNumeric(variant.saturated_fat),
+            sanitizeNumeric(variant.polyunsaturated_fat),
+            sanitizeNumeric(variant.monounsaturated_fat),
+            sanitizeNumeric(variant.trans_fat),
+            sanitizeNumeric(variant.cholesterol),
+            sanitizeNumeric(variant.sodium),
+            sanitizeNumeric(variant.potassium),
+            sanitizeNumeric(variant.dietary_fiber),
+            sanitizeNumeric(variant.sugars),
+            sanitizeNumeric(variant.vitamin_a),
+            sanitizeNumeric(variant.vitamin_c),
+            sanitizeNumeric(variant.calcium),
+            sanitizeNumeric(variant.iron),
             sanitizeGlycemicIndex(variant.glycemic_index),
+            variant.custom_nutrients || {},
           ]
         );
         totalVariantsCreated++;
       }
     }
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
 
     return {
-      message: "Food data imported successfully.",
+      message: 'Food data imported successfully.',
       createdFoods: totalFoodsCreated,
       createdVariants: totalVariantsCreated,
     };
   } catch (error) {
-    await client.query("ROLLBACK");
-    console.error("Error during bulk food import:", error);
+    await client.query('ROLLBACK');
+    console.error('Error during bulk food import:', error);
     throw error;
   } finally {
     client.release();
@@ -754,33 +960,6 @@ async function getFoodsNeedingReview(userId) {
   }
 }
 
-async function updateFoodEntriesSnapshot(userId, foodId, newSnapshotData) {
-  const client = await getClient(userId); // User-specific operation
-  try {
-    const result = await client.query(
-      `UPDATE food_entries
-       SET
-          food_name = $1,
-          serving_size = $2,
-          serving_unit = $3,
-          calories = $4
-       WHERE user_id = $5 AND food_id = $6
-       RETURNING id`,
-      [
-        newSnapshotData.food_name,
-        newSnapshotData.serving_size,
-        newSnapshotData.serving_unit,
-        newSnapshotData.calories,
-        userId,
-        foodId,
-      ]
-    );
-    return result.rowCount;
-  } finally {
-    client.release();
-  }
-}
-
 async function clearUserIgnoredUpdate(userId, variantId) {
   const client = await getClient(userId); // User-specific operation
   try {
@@ -795,19 +974,20 @@ async function clearUserIgnoredUpdate(userId, variantId) {
 }
 module.exports = {
   sanitizeGlycemicIndex,
+  sanitizeNumeric,
+  sanitizeBoolean,
   searchFoods,
   createFood,
+  findFoodByBarcode,
   getFoodById,
   getFoodOwnerId,
   updateFood,
   deleteFood,
   getFoodsWithPagination,
   countFoods,
-  findFoodByNameAndBrand,
   getFoodDeletionImpact,
   createFoodsInBulk,
   getFoodsNeedingReview,
-  updateFoodEntriesSnapshot,
   clearUserIgnoredUpdate,
   deleteFoodAndDependencies,
 };

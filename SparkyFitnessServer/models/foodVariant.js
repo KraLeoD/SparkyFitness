@@ -1,8 +1,8 @@
-const { getClient } = require("../db/poolManager");
-const foodDb = require("./food"); // Import foodDb to get food owner
-const { log } = require("../config/logging");
-const format = require("pg-format");
-const { sanitizeGlycemicIndex } = require("./food");
+const { getClient } = require('../db/poolManager');
+const foodDb = require('./food'); // Import foodDb to get food owner
+const { log } = require('../config/logging');
+const format = require('pg-format');
+const { sanitizeGlycemicIndex } = require('./food');
 
 async function createFoodVariant(variantData, userId) {
   const foodOwnerId = await foodDb.getFoodOwnerId(variantData.food_id, userId);
@@ -13,8 +13,8 @@ async function createFoodVariant(variantData, userId) {
         food_id, serving_size, serving_unit, calories, protein, carbs, fat,
         saturated_fat, polyunsaturated_fat, monounsaturated_fat, trans_fat,
         cholesterol, sodium, potassium, dietary_fiber, sugars,
-        vitamin_a, vitamin_c, calcium, iron, is_default, glycemic_index, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, now(), now()) RETURNING id`,
+        vitamin_a, vitamin_c, calcium, iron, is_default, glycemic_index, custom_nutrients, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, now(), now()) RETURNING id`,
       [
         variantData.food_id,
         variantData.serving_size,
@@ -38,6 +38,7 @@ async function createFoodVariant(variantData, userId) {
         variantData.iron,
         variantData.is_default || false,
         sanitizeGlycemicIndex(variantData.glycemic_index),
+        variantData.custom_nutrients || {},
       ]
     );
     return result.rows[0];
@@ -50,7 +51,7 @@ async function getFoodVariantById(id, userId) {
   const client = await getClient(userId);
   try {
     const result = await client.query(
-      "SELECT *, glycemic_index FROM food_variants WHERE id = $1",
+      'SELECT *, glycemic_index, custom_nutrients FROM food_variants WHERE id = $1',
       [id]
     );
     return result.rows[0];
@@ -70,7 +71,7 @@ async function getFoodVariantOwnerId(variantId, userId) {
     );
     const ownerId = result.rows[0]?.user_id;
     log(
-      "info",
+      'info',
       `getFoodVariantOwnerId: Variant ID ${variantId} owner: ${ownerId}`
     );
     return ownerId;
@@ -83,7 +84,7 @@ async function getFoodVariantsByFoodId(foodId, userId) {
   const client = await getClient(userId); // User-specific operation (RLS will handle access)
   try {
     const result = await client.query(
-      "SELECT * FROM food_variants WHERE food_id = $1",
+      'SELECT * FROM food_variants WHERE food_id = $1',
       [foodId]
     );
     return result.rows;
@@ -121,8 +122,9 @@ async function updateFoodVariant(id, variantData, userId) {
         iron = COALESCE($20, iron),
         is_default = COALESCE($21, is_default),
         glycemic_index = COALESCE($22, glycemic_index),
+        custom_nutrients = COALESCE($23, custom_nutrients),
         updated_at = now()
-      WHERE id = $23
+      WHERE id = $24
       RETURNING *`,
       [
         variantData.food_id,
@@ -147,6 +149,7 @@ async function updateFoodVariant(id, variantData, userId) {
         variantData.iron,
         variantData.is_default,
         sanitizeGlycemicIndex(variantData.glycemic_index),
+        variantData.custom_nutrients || {},
         id,
       ]
     );
@@ -154,7 +157,7 @@ async function updateFoodVariant(id, variantData, userId) {
     // If this variant is being set as default, ensure all other variants for this food_id are not default
     if (variantData.is_default) {
       await client.query(
-        `UPDATE food_variants SET is_default = FALSE WHERE food_id = $1 AND id != $2`,
+        'UPDATE food_variants SET is_default = FALSE WHERE food_id = $1 AND id != $2',
         [variantData.food_id, id]
       );
     }
@@ -171,7 +174,7 @@ async function deleteFoodVariant(id, userId) {
   const client = await getClient(userId); // User-specific operation
   try {
     const result = await client.query(
-      "DELETE FROM food_variants WHERE id = $1 RETURNING id",
+      'DELETE FROM food_variants WHERE id = $1 RETURNING id',
       [id]
     );
     return result.rowCount > 0;
@@ -182,7 +185,10 @@ async function deleteFoodVariant(id, userId) {
 
 async function bulkCreateFoodVariants(variantsData, userId) {
   // For bulk create, we need the user_id of the food owner. Assuming all variants belong to the same food.
-  const foodOwnerId = variantsData.length > 0 ? await foodDb.getFoodOwnerId(variantsData[0].food_id, userId) : null;
+  const foodOwnerId =
+    variantsData.length > 0
+      ? await foodDb.getFoodOwnerId(variantsData[0].food_id, userId)
+      : null;
   const client = await getClient(userId); // User-specific operation
   try {
     const query = `
@@ -190,7 +196,7 @@ async function bulkCreateFoodVariants(variantsData, userId) {
         food_id, serving_size, serving_unit, calories, protein, carbs, fat,
         saturated_fat, polyunsaturated_fat, monounsaturated_fat, trans_fat,
         cholesterol, sodium, potassium, dietary_fiber, sugars,
-        vitamin_a, vitamin_c, calcium, iron, is_default, glycemic_index, created_at, updated_at
+        vitamin_a, vitamin_c, calcium, iron, is_default, glycemic_index, custom_nutrients, created_at, updated_at
       ) VALUES %L RETURNING id`;
 
     const values = variantsData.map((variant) => [
@@ -216,8 +222,9 @@ async function bulkCreateFoodVariants(variantsData, userId) {
       variant.iron,
       variant.is_default || false,
       sanitizeGlycemicIndex(variant.glycemic_index),
-      "now()",
-      "now()",
+      variant.custom_nutrients || {},
+      'now()',
+      'now()',
     ]);
 
     const formattedQuery = format(query, values);

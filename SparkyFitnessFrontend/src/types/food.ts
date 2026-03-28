@@ -1,4 +1,10 @@
-export type GlycemicIndex = 'None' | 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High';
+export type GlycemicIndex =
+  | 'None'
+  | 'Very Low'
+  | 'Low'
+  | 'Medium'
+  | 'High'
+  | 'Very High';
 
 export interface FoodVariant {
   id?: string;
@@ -24,21 +30,30 @@ export interface FoodVariant {
   is_default?: boolean;
   is_locked?: boolean;
   glycemic_index?: GlycemicIndex;
+  custom_nutrients?: Record<string, string | number>; // New field for custom nutrients
 }
 
 export interface Food {
   id: string;
   name: string;
-  brand?: string;
+  brand?: string | null;
   is_custom: boolean;
   user_id?: string;
   shared_with_public?: boolean;
+  barcode?: string;
   provider_external_id?: string;
-  provider_type?: 'openfoodfacts' | 'nutritionix' | 'fatsecret' | 'mealie' | 'tandoor' | 'usda';
+  provider_type?:
+    | 'openfoodfacts'
+    | 'nutritionix'
+    | 'fatsecret'
+    | 'mealie'
+    | 'tandoor'
+    | 'usda';
   default_variant?: FoodVariant;
   variants?: FoodVariant[];
   is_quick_food?: boolean;
   glycemic_index?: GlycemicIndex;
+  custom_nutrients?: Record<string, string | number>; // New field for custom nutrients
 }
 
 export interface FoodDeletionImpact {
@@ -53,11 +68,6 @@ export interface FoodDeletionImpact {
   familySharedUsers: string[];
 }
 
-export interface FoodSearchResult {
-  recentFoods?: Food[];
-  topFoods?: Food[];
-  searchResults?: Food[];
-}
 export interface FoodEntry {
   id: string;
   food_id?: string; // Make optional as it might be a meal_id
@@ -96,6 +106,7 @@ export interface FoodEntry {
   iron?: number;
   glycemic_index?: GlycemicIndex;
   serving_size?: number;
+  custom_nutrients?: Record<string, string | number>; // New field for custom nutrients
 }
 
 export interface CSVData {
@@ -127,4 +138,36 @@ export interface CSVData {
   vitamin_c: number;
   calcium: number;
   iron: number;
+  custom_nutrients?: Record<string, string | number>; // New field for custom nutrients
 }
+
+export interface NutritionixItem {
+  id?: string;
+  name: string;
+  food_name?: string;
+  brand?: string | null;
+  brand_name?: string;
+  image?: string;
+  serving_size?: number;
+  serving_unit?: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  saturated_fat?: number;
+  polyunsaturated_fat?: number;
+  monounsaturated_fat?: number;
+  trans_fat?: number;
+  cholesterol?: number;
+  sodium?: number;
+  potassium?: number;
+  dietary_fiber?: number;
+  sugars?: number;
+  vitamin_a?: number;
+  vitamin_c?: number;
+  calcium?: number;
+  iron?: number;
+  glycemic_index?: GlycemicIndex;
+}
+
+export type FoodDataForBackend = Omit<CSVData, 'id'>;

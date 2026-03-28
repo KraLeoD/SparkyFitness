@@ -1,13 +1,19 @@
 const express = require('express');
-const router = express.Router();
+const { z } = require('zod');
+const {
+  createPresetSessionRequestSchema,
+  updatePresetSessionRequestSchema,
+  presetSessionResponseSchema,
+} = require('@workspace/shared');
 const exercisePresetEntryRepository = require('../models/exercisePresetEntryRepository');
-const workoutPresetRepository = require('../models/workoutPresetRepository');
-const exerciseEntryRepository = require('../models/exerciseEntry');
-const exerciseRepository = require('../models/exercise'); // Import exerciseRepository
+const exerciseService = require('../services/exerciseService');
 const { log } = require('../config/logging');
-const { body, param, validationResult } = require('express-validator');
 
-// Middleware to check if the user is authenticated
+const router = express.Router();
+const presetEntryIdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+
 const isAuthenticated = (req, res, next) => {
   if (!req.userId) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -15,176 +21,244 @@ const isAuthenticated = (req, res, next) => {
   next();
 };
 
-// POST /api/exercise-preset-entries - Add a workout preset to the diary
-router.post(
-  '/',
-  isAuthenticated,
-  [
-    body('workout_preset_id').isInt().withMessage('Workout preset ID must be an integer.'),
-    body('entry_date').isISO8601().withMessage('Entry date must be a valid ISO 8601 date.'),
-    body('name').optional().notEmpty().withMessage('Preset name cannot be empty.'),
-    body('description').optional().isString().withMessage('Description must be a string.'),
-    body('notes').optional().isString().withMessage('Notes must be a string.'),
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    try {
-      const { workout_preset_id, entry_date, name, description, notes, source } = req.body;
-      const userId = req.userId;
-      const createdByUserId = req.userId;
+function sendValidationError(res, message, error) {
+  return res.status(400).json({
+    error: message,
+    details: error.flatten(),
+  });
+}
 
-      // 1. Fetch the workout preset details
-      const workoutPreset = await workoutPresetRepository.getWorkoutPresetById(workout_preset_id, userId);
-      if (!workoutPreset) {
-        return res.status(404).json({ message: 'Workout preset not found.' });
-      }
+function handleRouteError(error, res, next) {
+  if (error?.status) {
+    return res.status(error.status).json({ message: error.message });
+  }
 
-      // 2. Create the exercise_preset_entry
-      const newExercisePresetEntry = await exercisePresetEntryRepository.createExercisePresetEntry(
-        userId,
-        {
-          workout_preset_id: workout_preset_id,
-          name: name || workoutPreset.name, // Use provided name or preset name
-          description: description || workoutPreset.description, // Use provided description or preset description
-          entry_date: entry_date,
-          notes: notes,
-          source: source !== undefined ? source : 'manual',
-        },
-        createdByUserId
+  if (error instanceof z.ZodError) {
+    log('error', 'Grouped workout response validation failed:', error);
+    return next(
+      Object.assign(new Error('Internal response validation failed'), {
+        status: 500,
+      })
+    );
+  }
+
+  return next(error);
+}
+
+/**
+ * @swagger
+ * tags:
+ *   name: Fitness & Workouts
+ *   description: Exercise database, workout presets, and activity logging.
+ */
+
+/**
+ * @swagger
+ * /exercise-preset-entries:
+ *   post:
+ *     summary: Create a grouped workout session
+ *     tags: [Fitness & Workouts]
+ *     description: Creates a grouped workout from either a workout preset or an inline exercises array. Returns the full nested grouped session payload used by the mobile client.
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       201:
+ *         description: The grouped workout session was created successfully.
+ *       400:
+ *         description: Invalid request body.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Workout preset not found.
+ */
+router.post('/', isAuthenticated, async (req, res, next) => {
+  try {
+    const parsedBody = createPresetSessionRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return sendValidationError(
+        res,
+        'Invalid grouped workout payload.',
+        parsedBody.error
       );
-
-      const createdExerciseEntries = []; // Array to store created exercise entries
-
-      // 3. Create individual exercise_entries for each exercise in the preset
-      if (workoutPreset.exercises && workoutPreset.exercises.length > 0) {
-        for (const exercise of workoutPreset.exercises) {
-          // Fetch full exercise details to get calories_per_hour
-          const fullExercise = await exerciseRepository.getExerciseById(exercise.exercise_id, userId);
-          if (!fullExercise) {
-            log('warn', `Exercise with ID ${exercise.exercise_id} not found for preset. Skipping.`);
-            continue; // Skip this exercise if not found
-          }
-
-          // Determine duration_minutes, default to 30 if not specified in preset
-          const durationMinutes = exercise.duration_minutes || 30;
-          // Calculate calories burned
-          const caloriesBurned = Math.round((fullExercise.calories_per_hour / 60) * durationMinutes);
-
-          const exerciseEntryData = {
-            exercise_id: exercise.exercise_id,
-            entry_date: entry_date,
-            notes: exercise.notes, // Use notes from preset exercise if available
-            sets: exercise.sets, // Copy sets from preset exercise
-            duration_minutes: durationMinutes,
-            calories_burned: caloriesBurned,
-            avg_heart_rate: null, // Set to null as it's not available from preset definition
-            // max_heart_rate is not directly stored in ExerciseEntry, it's derived on frontend
-          };
-          const newEntry = await exerciseEntryRepository.createExerciseEntry(
-            userId,
-            exerciseEntryData,
-            createdByUserId,
-            'Workout Preset', // entrySource
-            newExercisePresetEntry.id // Link to the newly created exercise_preset_entry
-          );
-          createdExerciseEntries.push(newEntry); // Add the created entry to the array
-        }
-      }
-
-      res.status(201).json(createdExerciseEntries); // Return the array of created exercise entries
-    } catch (error) {
-      log('error', `Error adding workout preset to diary:`, error);
-      next(error);
     }
+
+    const groupedWorkout = await exerciseService.createGroupedWorkoutSession(
+      req.userId,
+      req.originalUserId || req.userId,
+      parsedBody.data
+    );
+
+    const response = presetSessionResponseSchema.parse(groupedWorkout);
+    res.status(201).json(response);
+  } catch (error) {
+    log('error', 'Error creating grouped workout session:', error);
+    handleRouteError(error, res, next);
   }
-);
+});
 
-// GET /api/exercise-preset-entries/:id - Get an exercise preset entry by ID
-router.get(
-  '/:id',
-  isAuthenticated,
-  [
-    param('id').isUUID().withMessage('Exercise preset entry ID must be a valid UUID.'),
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+/**
+ * @swagger
+ * /exercise-preset-entries/{id}:
+ *   get:
+ *     summary: Get a grouped workout session by ID
+ *     tags: [Fitness & Workouts]
+ *     description: Returns the full nested grouped workout session, including child exercises and sets.
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: The grouped workout session.
+ *       400:
+ *         description: Invalid grouped workout ID.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Grouped workout session not found.
+ */
+router.get('/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const parsedParams = presetEntryIdParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      return sendValidationError(
+        res,
+        'Invalid grouped workout id.',
+        parsedParams.error
+      );
     }
-    try {
-      const { id } = req.params;
-      const userId = req.userId;
-      const entry = await exercisePresetEntryRepository.getExercisePresetEntryById(id, userId);
-      if (!entry) {
-        return res.status(404).json({ message: 'Exercise preset entry not found.' });
-      }
-      res.json(entry);
-    } catch (error) {
-      log('error', `Error getting exercise preset entry by ID ${req.params.id}:`, error);
-      next(error);
-    }
-  }
-);
 
-// PUT /api/exercise-preset-entries/:id - Update an exercise preset entry
-router.put(
-  '/:id',
-  isAuthenticated,
-  [
-    param('id').isUUID().withMessage('Exercise preset entry ID must be a valid UUID.'),
-    body('name').optional().notEmpty().withMessage('Preset name cannot be empty.'),
-    body('description').optional().isString().withMessage('Description must be a string.'),
-    body('notes').optional().isString().withMessage('Notes must be a string.'),
-    body('entry_date').optional().isISO8601().withMessage('Entry date must be a valid ISO 8601 date.'),
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    try {
-      const { id } = req.params;
-      const userId = req.userId;
-      const updatedEntry = await exercisePresetEntryRepository.updateExercisePresetEntry(id, userId, req.body);
-      if (!updatedEntry) {
-        return res.status(404).json({ message: 'Exercise preset entry not found or not authorized.' });
-      }
-      res.json(updatedEntry);
-    } catch (error) {
-      log('error', `Error updating exercise preset entry ${req.params.id}:`, error);
-      next(error);
-    }
-  }
-);
+    const groupedWorkout = await exerciseService.getGroupedWorkoutSessionById(
+      req.userId,
+      parsedParams.data.id
+    );
 
-// DELETE /api/exercise-preset-entries/:id - Delete an exercise preset entry
-router.delete(
-  '/:id',
-  isAuthenticated,
-  [
-    param('id').isUUID().withMessage('Exercise preset entry ID must be a valid UUID.'),
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    if (!groupedWorkout) {
+      return res
+        .status(404)
+        .json({ message: 'Exercise preset entry not found.' });
     }
-    try {
-      const { id } = req.params;
-      const userId = req.userId;
-      const deleted = await exercisePresetEntryRepository.deleteExercisePresetEntry(id, userId);
-      if (!deleted) {
-        return res.status(404).json({ message: 'Exercise preset entry not found or not authorized.' });
-      }
-      res.status(204).send(); // No content
-    } catch (error) {
-      log('error', `Error deleting exercise preset entry ${req.params.id}:`, error);
-      next(error);
-    }
+
+    const response = presetSessionResponseSchema.parse(groupedWorkout);
+    res.status(200).json(response);
+  } catch (error) {
+    log(
+      'error',
+      `Error getting grouped workout session ${req.params.id}:`,
+      error
+    );
+    handleRouteError(error, res, next);
   }
-);
+});
+
+/**
+ * @swagger
+ * /exercise-preset-entries/{id}:
+ *   put:
+ *     summary: Update a grouped workout session
+ *     tags: [Fitness & Workouts]
+ *     description: Updates grouped workout header fields and, for manual or sparky workouts, can replace the child exercises array in one request. Returns the full nested grouped session payload.
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: The grouped workout session was updated successfully.
+ *       400:
+ *         description: Invalid request body or grouped workout ID.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Grouped workout session not found.
+ *       409:
+ *         description: Nested exercise edits are not supported for synced/imported grouped workouts.
+ */
+router.put('/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const parsedParams = presetEntryIdParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      return sendValidationError(
+        res,
+        'Invalid grouped workout id.',
+        parsedParams.error
+      );
+    }
+
+    const parsedBody = updatePresetSessionRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return sendValidationError(
+        res,
+        'Invalid grouped workout update payload.',
+        parsedBody.error
+      );
+    }
+
+    const groupedWorkout = await exerciseService.updateGroupedWorkoutSession(
+      req.userId,
+      req.originalUserId || req.userId,
+      parsedParams.data.id,
+      parsedBody.data
+    );
+
+    const response = presetSessionResponseSchema.parse(groupedWorkout);
+    res.status(200).json(response);
+  } catch (error) {
+    log(
+      'error',
+      `Error updating grouped workout session ${req.params.id}:`,
+      error
+    );
+    handleRouteError(error, res, next);
+  }
+});
+
+/**
+ * @swagger
+ * /exercise-preset-entries/{id}:
+ *   delete:
+ *     summary: Delete a grouped workout session
+ *     tags: [Fitness & Workouts]
+ *     description: Deletes a grouped workout session and cascades to its child exercise entries.
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       204:
+ *         description: Grouped workout session deleted successfully.
+ *       400:
+ *         description: Invalid grouped workout ID.
+ *       401:
+ *         description: Unauthorized.
+ *       404:
+ *         description: Grouped workout session not found.
+ */
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const parsedParams = presetEntryIdParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      return sendValidationError(
+        res,
+        'Invalid grouped workout id.',
+        parsedParams.error
+      );
+    }
+
+    const deleted =
+      await exercisePresetEntryRepository.deleteExercisePresetEntry(
+        parsedParams.data.id,
+        req.userId
+      );
+    if (!deleted) {
+      return res.status(404).json({
+        message: 'Exercise preset entry not found or not authorized.',
+      });
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    log(
+      'error',
+      `Error deleting grouped workout session ${req.params.id}:`,
+      error
+    );
+    next(error);
+  }
+});
 
 module.exports = router;

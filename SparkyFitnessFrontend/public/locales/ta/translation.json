@@ -1801,5 +1801,8 @@
     "liveAiContextTitle": "நேரடி AI சூழல்",
     "liveAiContextDescription": "இது AI உதவியாளருக்கு வழங்கப்படும் தற்போதைய சூழல்",
     "loadingAiContext": "AI சூழலை ஏற்றுகிறது..."
+  },
+  "exerciseReportsDashboard": {
+    "noWorkout": "உடற்பயிற்சி இல்லை"
   }
 }

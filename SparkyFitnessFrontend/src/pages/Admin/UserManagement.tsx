@@ -1,456 +1,460 @@
-import React, { useState, useEffect } from 'react';
+import type React from 'react';
+import { useState, useMemo, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useToast } from '@/hooks/use-toast';
-import { Users, Search, Edit, Trash2, UserCog, KeyRound, Lock } from 'lucide-react';
+import { Search, Edit, Trash2, UserCog, KeyRound, Lock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from '@/components/ui/table';
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from '@/components/ui/accordion';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { userManagementService, type User } from '../../services/userManagementService';
+} from '@/components/ui/tooltip';
+import { type User } from '../../api/Admin/userManagementService';
+import { useUsers } from '@/hooks/Admin/useUsers';
+import { useDebounce } from '@/hooks/useDebounce';
+
+import {
+  useUpdateUserFullName,
+  useDeleteUser,
+  useResetUserPassword,
+  useUpdateUserStatus,
+  useUpdateUserRole,
+  useResetUserMfa,
+} from '@/hooks/Admin/useUsers';
 
 const UserManagement: React.FC = () => {
   const { t } = useTranslation();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+
+  // Local State
   const [searchTerm, setSearchTerm] = useState('');
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editedUser, setEditedUser] = useState<User | null>(null);
   const [sortBy, setSortBy] = useState<keyof User>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [accordionOpen, setAccordionOpen] = useState<string[]>([]); // Keep accordion closed by default
+  const [accordionOpen, setAccordionOpen] = useState<string[]>([]);
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const fetchedUsers = await userManagementService.getUsers(searchTerm); // Fetch without sort parameters
-      setUsers(fetchedUsers);
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.errorLoadingUsers', 'Failed to fetch user data.'));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.errorLoadingUsers', 'Failed to fetch user data.'),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Queries & Mutations
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const {
+    data: users,
+    isLoading,
+    isError,
+  } = useUsers(debouncedSearchTerm, sortBy, sortOrder);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [searchTerm, sortBy, sortOrder, t]); // Re-fetch when search term or sort changes
+  const { mutate: updateFullName } = useUpdateUserFullName();
+  const { mutate: deleteUser } = useDeleteUser();
+  const { mutate: resetPassword } = useResetUserPassword();
+  const { mutate: updateStatus } = useUpdateUserStatus();
+  const { mutate: updateRole } = useUpdateUserRole();
+  const { mutate: resetMfa } = useResetUserMfa();
 
+  // --- Handlers ---
 
+  const handleSaveFullName = (
+    userId: string,
+    newFullNameInput: string, // Raw input from the field
+    currentFullName: string
+  ) => {
+    const trimmedNewFullName = newFullNameInput.trim(); // Trim whitespace from the input
 
-  const handleSaveFullName = async (userId: string, newFullName: string, currentFullName: string) => {
-    if (!newFullName || newFullName === currentFullName) {
+    // Check if the trimmed name is empty or unchanged
+    if (!trimmedNewFullName || trimmedNewFullName === currentFullName) {
       setEditingUserId(null);
-      setEditedUser(null);
       return;
     }
- 
-     if (!window.confirm(t('admin.userManagement.confirmChangeFullName', { currentFullName, newFullName, defaultValue: `Are you sure you want to change ${currentFullName}'s full name to ${newFullName}?` }))) {
-       setEditingUserId(null);
-       setEditedUser(null);
-       return;
-     }
 
-    setLoading(true);
-    try {
-      await userManagementService.updateUserFullName(userId, newFullName);
-      setUsers(prevUsers => prevUsers.map(u => (u.id === userId ? { ...u, full_name: newFullName } : u)));
-      toast({
-        title: t('success', 'Success'),
-        description: t('admin.userManagement.fullNameUpdated', { currentFullName, defaultValue: `User ${currentFullName}'s full name updated successfully.` }),
-      });
+    // Use the trimmed name for the confirmation prompt
+    if (
+      !window.confirm(
+        t('admin.userManagement.confirmChangeFullName', {
+          currentFullName: currentFullName, // Use camelCase key
+          newFullName: trimmedNewFullName, // Use camelCase key with trimmed name
+          defaultValue:
+            "Are you sure you want to change {{currentFullName}}'s full name to {{newFullName}}?", // Use camelCase placeholders
+        })
+      )
+    ) {
       setEditingUserId(null);
-      setEditedUser(null);
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.failedToSaveFullName', 'Failed to save user full name.'));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.failedToSaveFullName', 'Failed to save user full name.'),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    setLoading(true);
-    try {
-      await userManagementService.deleteUser(userId);
-      setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
-      toast({
-        title: t('success', 'Success'),
-        description: t('admin.userManagement.deleteSuccess', { userId, defaultValue: `User with ID ${userId} deleted successfully.` }),
-      });
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.deleteFailed', 'Failed to delete user.'));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.deleteFailed', 'Failed to delete user.'),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (userId: string, userName: string) => {
-    if (!window.confirm(t('admin.userManagement.resetPasswordConfirm', { userName, defaultValue: `Are you sure you want to reset the password for ${userName}?` }))) {
       return;
     }
-    setLoading(true);
-    try {
-      await userManagementService.resetUserPassword(userId);
-      toast({
-        title: t('success', 'Success'),
-        description: t('admin.userManagement.resetPasswordInitiated', { userName, defaultValue: `Password reset initiated for ${userName}.` }),
-      });
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.resetPasswordFailed', 'Failed to reset password.'));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.resetPasswordFailed', 'Failed to reset password.'),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+
+    // Call the mutation with the trimmed name
+    updateFullName(
+      { userId, fullName: trimmedNewFullName },
+      {
+        onSuccess: () => {
+          setEditingUserId(null);
+          setEditedUser(null);
+        },
+      }
+    );
   };
 
-  const handleToggleUserStatus = async (userId: string, userName: string, newCheckedState: boolean) => {
-    const actualNewStatus = newCheckedState;
-    const action = actualNewStatus ? 'activate' : 'deactivate'; // Action based on the actual new state
-    if (!window.confirm(t('admin.userManagement.toggleUserStatusConfirm', { action, userName, defaultValue: `Are you sure you want to ${action} user ${userName}?` }))) {
+  const handleDeleteUser = (userId: string) => {
+    if (
+      !window.confirm(
+        t(
+          'admin.userManagement.deleteUserConfirm',
+          'Are you sure you want to delete this user?'
+        )
+      )
+    )
       return;
-    }
-    setLoading(true);
-    try {
-      await userManagementService.updateUserStatus(userId, actualNewStatus);
-      setUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, is_active: actualNewStatus } : u))
-      );
-      toast({
-        title: t('success', 'Success'),
-        description: t('admin.userManagement.userStatusUpdated', { userName, action, defaultValue: `User ${userName} ${action}d successfully.` }),
-      });
-      await fetchUsers(); // Re-fetch users to get the latest status
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.failedToUpdateUserStatus', { action, defaultValue: `Failed to ${action} user.` }));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.failedToUpdateUserStatus', { action, defaultValue: `Failed to ${action} user.` }),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+
+    deleteUser(userId);
   };
 
-  const handleToggleUserRole = async (userId: string, userName: string, currentRole: string) => {
+  const handleResetPassword = (userId: string, userName: string) => {
+    if (
+      !window.confirm(
+        t('admin.userManagement.resetPasswordConfirm', {
+          userName,
+          defaultValue: `Are you sure you want to reset the password for ${userName}?`,
+        })
+      )
+    )
+      return;
+
+    resetPassword(userId);
+  };
+
+  const handleToggleUserStatus = (
+    userId: string,
+    userName: string,
+    newCheckedState: boolean
+  ) => {
+    const action = newCheckedState ? 'activate' : 'deactivate';
+    if (
+      !window.confirm(
+        t('admin.userManagement.toggleUserStatusConfirm', {
+          action,
+          userName,
+          defaultValue: `Are you sure you want to ${action} user ${userName}?`,
+        })
+      )
+    )
+      return;
+
+    updateStatus({ userId, isActive: newCheckedState });
+  };
+
+  const handleToggleUserRole = (
+    userId: string,
+    userName: string,
+    currentRole: string
+  ) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
-    if (!window.confirm(t('admin.userManagement.toggleUserRoleConfirm', { userName, newRole, defaultValue: `Are you sure you want to change user ${userName}'s role to ${newRole}?` }))) {
+    if (
+      !window.confirm(
+        t('admin.userManagement.toggleUserRoleConfirm', {
+          userName,
+          newRole,
+          defaultValue: `Are you sure you want to change user ${userName}'s role to ${newRole}?`,
+        })
+      )
+    )
       return;
-    }
-    setLoading(true);
-    try {
-      await userManagementService.updateUserRole(userId, newRole);
-      setUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, role: newRole } : u))
-      );
-      toast({
-        title: t('success', 'Success'),
-        description: t('admin.userManagement.userRoleUpdated', { userName, newRole, defaultValue: `User ${userName}'s role updated to ${newRole} successfully.` }),
-      });
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.failedToUpdateUserRole', { userName, defaultValue: `Failed to update user ${userName}'s role.` }));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.failedToUpdateUserRole', { userName, defaultValue: `Failed to update user ${userName}'s role.` }),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+
+    updateRole({ userId, role: newRole });
   };
 
-  const handleResetMfa = async (userId: string, userName: string) => {
-    if (!window.confirm(t('admin.userManagement.resetMfaConfirm', { userName, defaultValue: `Are you sure you want to reset MFA for ${userName}? This will require the user to set up MFA again.` }))) {
+  const handleResetMfa = (userId: string, userName: string) => {
+    if (
+      !window.confirm(
+        t('admin.userManagement.resetMfaConfirm', `Reset MFA for ${userName}?`)
+      )
+    )
       return;
-    }
-    setLoading(true);
-    try {
-      await userManagementService.resetUserMfa(userId);
-      setUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, mfa_totp_enabled: false, mfa_email_enabled: false } : u))
-      );
-      toast({
-        title: t('success', 'Success'),
-        description: t('admin.userManagement.resetMfaSuccess', { userName, defaultValue: `MFA for ${userName} reset successfully.` }),
-      });
-    } catch (err: any) {
-      setError(err.message || t('admin.userManagement.resetMfaFailed', 'Failed to reset MFA.'));
-      toast({
-        title: t('admin.userManagement.error', 'Error'),
-        description: t('admin.userManagement.resetMfaFailed', 'Failed to reset MFA.'),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
- 
-  if (loading) {
-    return <div>{t('admin.userManagement.loadingUsers', 'Loading user data...')}</div>;
-  }
 
-  if (error) {
-    return <div className="text-red-500">{t('admin.userManagement.error', 'Error')}: {error}</div>;
-  }
-
-  if (!users || users.length === 0) {
-    return <div>{t('admin.userManagement.noUsersFound', 'No users found.')}</div>;
-  }
-
-  const sortedUsers = [...users].sort((a, b) => {
-    const aValue = a[sortBy];
-    const bValue = b[sortBy];
-
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-    }
-    if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
-      return sortOrder === 'asc' ? (aValue === bValue ? 0 : aValue ? -1 : 1) : (aValue === bValue ? 0 : aValue ? 1 : -1);
-    }
-    if ((sortBy === 'created_at' || sortBy === 'last_login_at') && typeof aValue === 'string' && typeof bValue === 'string') {
-      const dateA = new Date(aValue);
-      const dateB = new Date(bValue);
-      return sortOrder === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
-    }
-    // Fallback for other types or mixed types, treat as strings
-    return sortOrder === 'asc' ? String(aValue).localeCompare(String(bValue)) : String(bValue).localeCompare(String(aValue));
-  });
-
-  const filteredUsers = sortedUsers.filter(user =>
-    (user.full_name?.toLowerCase() ?? '').includes(searchTerm.toLowerCase()) ||
-    (user.email?.toLowerCase() ?? '').includes(searchTerm.toLowerCase())
-  );
-
-  const handleEditedUserChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { id, value } = e.target;
-    if (editedUser) {
-      setEditedUser(prev => ({ ...prev!, [id]: value }));
-    }
+    resetMfa(userId);
   };
 
   const handleSortChange = (column: keyof User) => {
     if (sortBy === column) {
-      setSortOrder(prevOrder => (prevOrder === 'asc' ? 'desc' : 'asc'));
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortBy(column);
       setSortOrder('asc');
     }
   };
- 
+
+  const handleEditedUserChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (editedUser) {
+      setEditedUser({ ...editedUser, [e.target.id]: e.target.value });
+    }
+  };
+
+  const processedUsers = useMemo(() => {
+    if (!users) return [];
+
+    const sorted = [...users].sort((a, b) => {
+      const aValue = a[sortBy];
+      const bValue = b[sortBy];
+
+      const compare = (valA: string | boolean, valB: string | boolean) => {
+        if (sortBy.includes('_at'))
+          return (
+            new Date(valA as string).getTime() -
+            new Date(valB as string).getTime()
+          );
+        if (typeof valA === 'string' && typeof valB === 'string')
+          return valA.localeCompare(valB);
+        if (typeof valA === 'boolean' && typeof valB === 'boolean')
+          return valA === valB ? 0 : valA ? -1 : 1;
+        return String(valA).localeCompare(String(valB));
+      };
+
+      const result = compare(aValue, bValue);
+      return sortOrder === 'asc' ? result : -result;
+    });
+
+    return sorted.filter(
+      (user) =>
+        (user.full_name?.toLowerCase() ?? '').includes(
+          searchTerm.toLowerCase()
+        ) ||
+        (user.email?.toLowerCase() ?? '').includes(searchTerm.toLowerCase())
+    );
+  }, [users, sortBy, sortOrder, searchTerm]);
+
+  if (isLoading)
+    return <div>{t('admin.userManagement.loadingUsers', 'Loading...')}</div>;
+  if (isError)
+    return (
+      <div className="text-red-500">
+        {t('admin.userManagement.error', 'Error loading users')}
+      </div>
+    );
+
   return (
-    <Accordion type="multiple" className="w-full" value={accordionOpen} onValueChange={setAccordionOpen}>
+    <Accordion
+      type="multiple"
+      className="w-full"
+      value={accordionOpen}
+      onValueChange={setAccordionOpen}
+    >
       <AccordionItem value="user-management" className="border rounded-lg mb-4">
-        <AccordionTrigger
-          className="flex items-center gap-2 p-4 hover:no-underline"
-          description={t('admin.userManagement.description', 'Manage user accounts, roles, and statuses.')}
-        >
+        <AccordionTrigger className="flex items-center gap-2 p-4 hover:no-underline">
           <UserCog className="h-5 w-5" />
           {t('admin.userManagement.title', 'User Management')}
         </AccordionTrigger>
         <AccordionContent className="p-4 pt-0 space-y-6">
           <Card className="w-full mx-auto">
             <CardContent>
-              <div className="relative mb-4">
+              <div className="mt-3 relative mb-4">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder={t('admin.userManagement.searchUsers', 'Search users...')}
+                  placeholder={t(
+                    'admin.userManagement.searchUsers',
+                    'Search users...'
+                  )}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
+                  className="pl-8 "
                 />
               </div>
-              <div onClick={(e) => e.stopPropagation()}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('full_name'); }}
-                      >
-                        {t('admin.userManagement.fullName', 'Full Name')} {sortBy === 'full_name' && (sortOrder === 'asc' ? '▲' : '▼')} <Edit className="h-4 w-4 inline-block ml-1" />
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('email'); }}
-                      >
-                        {t('admin.userManagement.email', 'Email')} {sortBy === 'email' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('role'); }}
-                      >
-                        {t('admin.userManagement.admin', 'Admin')} {sortBy === 'role' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('is_active'); }}
-                      >
-                        {t('admin.userManagement.active', 'Active')} {sortBy === 'is_active' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('created_at'); }}
-                      >
-                        {t('admin.userManagement.createdAt', 'Created At')} {sortBy === 'created_at' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('last_login_at'); }}
-                      >
-                        {t('admin.userManagement.lastLogin', 'Last Login')} {sortBy === 'last_login_at' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('mfa_totp_enabled'); }}
-                      >
-                        {t('admin.userManagement.totpEnabled', 'TOTP')} {sortBy === 'mfa_totp_enabled' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); handleSortChange('mfa_email_enabled'); }}
-                      >
-                        {t('admin.userManagement.emailMfaEnabled', 'Email MFA')} {sortBy === 'mfa_email_enabled' && (sortOrder === 'asc' ? '▲' : '▼')}
-                      </TableHead>
-                      <TableHead className="text-right">{t('admin.userManagement.actions', 'Actions')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUsers.map(user => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium"
-                          onClick={() => {
-                            setEditingUserId(user.id);
-                            setEditedUser({ ...user });
-                          }}
-                        >
-                          {editingUserId === user.id ? (
-                            <Input
-                              id="full_name"
-                              value={editedUser?.full_name || ''}
-                              onChange={handleEditedUserChange}
-                              onBlur={(e) => handleSaveFullName(user.id, e.target.value, user.full_name)}
-                              autoFocus
-                            />
-                          ) : (
-                            user.full_name
+
+              {!processedUsers || processedUsers.length === 0 ? (
+                <div>
+                  {t('admin.userManagement.noUsersFound', 'No users found.')}
+                </div>
+              ) : (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableHead
+                          label={t('admin.userManagement.fullName', 'Name')}
+                          col="full_name"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label={t('admin.userManagement.email', 'Email')}
+                          col="email"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label={t('admin.userManagement.admin', 'Admin')}
+                          col="role"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label={t('admin.userManagement.active', 'Active')}
+                          col="is_active"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label={t('admin.userManagement.createdAt', 'Created')}
+                          col="created_at"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label={t(
+                            'admin.userManagement.lastLogin',
+                            'Last Login'
                           )}
-                        </TableCell>
-                        <TableCell>
-                          {user.email}
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            id={`role-${user.id}`}
-                            checked={user.role === 'admin'}
-                            onCheckedChange={(checked) => handleToggleUserRole(user.id, user.full_name, user.role)}
-                            disabled={loading}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            id={`is_active-${user.id}`}
-                            checked={user.is_active}
-                            onCheckedChange={(newCheckedState) => handleToggleUserStatus(user.id, user.full_name, newCheckedState)}
-                            disabled={loading}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {user.created_at ? new Date(user.created_at).toLocaleString() : t('common.notApplicable', 'N/A')}
-                        </TableCell>
-                        <TableCell>
-                          {user.last_login_at ? new Date(user.last_login_at).toLocaleString() : t('common.notApplicable', 'N/A')}
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            id={`mfa_totp_enabled-${user.id}`}
-                            checked={user.mfa_totp_enabled}
-                            disabled
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            id={`mfa_email_enabled-${user.id}`}
-                            checked={user.mfa_email_enabled}
-                            disabled
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end space-x-2">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="outline" size="sm" onClick={() => handleResetPassword(user.id, user.full_name)} disabled={loading}>
-                                    <KeyRound className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{t('admin.userManagement.resetPassword', 'Reset Password')}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(user.id)} disabled={loading}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{t('admin.userManagement.deleteUser', 'Delete User')}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="outline" size="sm" onClick={() => handleResetMfa(user.id, user.full_name)} disabled={loading}>
-                                    <Lock className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{t('admin.userManagement.resetMfa', 'Reset MFA')}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
+                          col="last_login_at"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label="TOTP"
+                          col="mfa_totp_enabled"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <SortableHead
+                          label="Email MFA"
+                          col="mfa_email_enabled"
+                          currentSort={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSortChange}
+                        />
+                        <TableHead className="text-right">
+                          {t('admin.userManagement.actions', 'Actions')}
+                        </TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {processedUsers.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell
+                            className="font-medium"
+                            onClick={() => {
+                              setEditingUserId(user.id);
+                              setEditedUser({ ...user });
+                            }}
+                          >
+                            {editingUserId === user.id ? (
+                              <Input
+                                id="full_name"
+                                value={editedUser?.full_name || ''}
+                                onChange={handleEditedUserChange}
+                                onBlur={(e) =>
+                                  handleSaveFullName(
+                                    user.id,
+                                    e.target.value,
+                                    user.full_name
+                                  )
+                                }
+                                autoFocus
+                              />
+                            ) : (
+                              <>
+                                {user.full_name}{' '}
+                                <Edit className="h-3 w-3 inline opacity-50 ml-1" />
+                              </>
+                            )}
+                          </TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={user.role === 'admin'}
+                              onCheckedChange={() =>
+                                handleToggleUserRole(
+                                  user.id,
+                                  user.full_name,
+                                  user.role
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={user.is_active}
+                              onCheckedChange={(c) =>
+                                handleToggleUserStatus(
+                                  user.id,
+                                  user.full_name,
+                                  c
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {user.created_at
+                              ? new Date(user.created_at).toLocaleString()
+                              : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            {user.last_login_at
+                              ? new Date(user.last_login_at).toLocaleString()
+                              : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <Switch checked={user.mfa_totp_enabled} disabled />
+                          </TableCell>
+                          <TableCell>
+                            <Switch checked={user.mfa_email_enabled} disabled />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end space-x-2">
+                              <ActionButton
+                                icon={<KeyRound className="h-4 w-4" />}
+                                onClick={() =>
+                                  handleResetPassword(user.id, user.full_name)
+                                }
+                                tooltip={t(
+                                  'admin.userManagement.resetPassword',
+                                  'Reset Password'
+                                )}
+                              />
+                              <ActionButton
+                                icon={<Lock className="h-4 w-4" />}
+                                onClick={() =>
+                                  handleResetMfa(user.id, user.full_name)
+                                }
+                                tooltip={t(
+                                  'admin.userManagement.resetMfa',
+                                  'Reset MFA'
+                                )}
+                              />
+                              <ActionButton
+                                icon={<Trash2 className="h-4 w-4" />}
+                                onClick={() => handleDeleteUser(user.id)}
+                                tooltip={t(
+                                  'admin.userManagement.deleteUser',
+                                  'Delete'
+                                )}
+                                variant="destructive"
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </AccordionContent>
@@ -458,5 +462,64 @@ const UserManagement: React.FC = () => {
     </Accordion>
   );
 };
+
+interface SortableHeadProps {
+  label: string;
+  col: keyof User;
+  currentSort: string;
+  sortOrder: 'asc' | 'desc';
+  onSort: (col: keyof User) => void;
+}
+
+const SortableHead = ({
+  label,
+  col,
+  currentSort,
+  sortOrder,
+  onSort,
+}: SortableHeadProps) => (
+  <TableHead
+    className="cursor-pointer select-none"
+    onClick={(e) => {
+      e.stopPropagation();
+      onSort(col);
+    }}
+  >
+    {label} {currentSort === col && (sortOrder === 'asc' ? '▲' : '▼')}
+  </TableHead>
+);
+
+interface ActionButtonProps {
+  icon: ReactNode;
+  onClick: () => void;
+  tooltip: string;
+  variant?:
+    | 'default'
+    | 'destructive'
+    | 'outline'
+    | 'secondary'
+    | 'ghost'
+    | 'link';
+}
+
+const ActionButton = ({
+  icon,
+  onClick,
+  tooltip,
+  variant = 'outline',
+}: ActionButtonProps) => (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant={variant} size="sm" onClick={onClick}>
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
 
 export default UserManagement;

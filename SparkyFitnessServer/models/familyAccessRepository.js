@@ -1,15 +1,21 @@
 const { getClient } = require('../db/poolManager');
 
-async function checkFamilyAccessPermission(familyUserId, ownerUserId, requiredPermissions) {
+async function checkFamilyAccessPermission(
+  familyUserId,
+  ownerUserId,
+  requiredPermissions
+) {
   const client = await getClient(familyUserId); // User-specific operation
   try {
     // Ensure requiredPermissions is an array
-    const permissionsArray = Array.isArray(requiredPermissions) ? requiredPermissions : [requiredPermissions];
+    const permissionsArray = Array.isArray(requiredPermissions)
+      ? requiredPermissions
+      : [requiredPermissions];
 
     // Construct the WHERE clause for permissions dynamically
-    const permissionChecks = permissionsArray.map((_, index) =>
-      `(access_permissions->>$${3 + index})::boolean = TRUE`
-    ).join(' OR ');
+    const permissionChecks = permissionsArray
+      .map((_, index) => `(access_permissions->>$${3 + index})::boolean = TRUE`)
+      .join(' OR ');
 
     const result = await client.query(
       `SELECT 1
@@ -36,7 +42,7 @@ async function getFamilyAccessEntriesByOwner(ownerUserId) {
               p_owner.full_name AS owner_full_name, p_family.full_name AS family_full_name
        FROM family_access fa
        LEFT JOIN profiles p_owner ON fa.owner_user_id = p_owner.id
-       LEFT JOIN auth.users au ON au.id = fa.owner_user_id
+       LEFT JOIN public."user" u ON u.id = fa.owner_user_id
        LEFT JOIN profiles p_family ON fa.family_user_id = p_family.id
        WHERE fa.owner_user_id = $1
        ORDER BY fa.created_at DESC`,
@@ -55,10 +61,10 @@ async function getFamilyAccessEntriesByUserId(userId) {
       `SELECT fa.id, fa.owner_user_id, fa.family_user_id, fa.family_email, fa.access_permissions,
               fa.access_start_date, fa.access_end_date, fa.is_active, fa.status,
               p_owner.full_name AS owner_full_name, p_family.full_name AS family_full_name,
-              au.email as owner_email
+              u.email as owner_email
        FROM family_access fa
        LEFT JOIN profiles p_owner ON fa.owner_user_id = p_owner.id
-       LEFT JOIN auth.users au ON au.id = fa.owner_user_id
+       LEFT JOIN public."user" u ON u.id = fa.owner_user_id
        LEFT JOIN profiles p_family ON fa.family_user_id = p_family.id
        WHERE fa.owner_user_id = $1 OR fa.family_user_id = $1
        ORDER BY fa.created_at DESC`,
@@ -70,13 +76,27 @@ async function getFamilyAccessEntriesByUserId(userId) {
   }
 }
 
-async function createFamilyAccessEntry(ownerUserId, familyUserId, familyEmail, accessPermissions, accessEndDate, status) {
+async function createFamilyAccessEntry(
+  ownerUserId,
+  familyUserId,
+  familyEmail,
+  accessPermissions,
+  accessEndDate,
+  status
+) {
   const client = await getClient(ownerUserId); // User-specific operation
   try {
     const result = await client.query(
       `INSERT INTO family_access (owner_user_id, family_user_id, family_email, access_permissions, access_end_date, status, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'pending'), now(), now()) RETURNING *`,
-      [ownerUserId, familyUserId, familyEmail, accessPermissions, accessEndDate, status]
+      [
+        ownerUserId,
+        familyUserId,
+        familyEmail,
+        accessPermissions,
+        accessEndDate,
+        status,
+      ]
     );
     return result.rows[0];
   } finally {
@@ -84,7 +104,14 @@ async function createFamilyAccessEntry(ownerUserId, familyUserId, familyEmail, a
   }
 }
 
-async function updateFamilyAccessEntry(id, ownerUserId, accessPermissions, accessEndDate, isActive, status) {
+async function updateFamilyAccessEntry(
+  id,
+  ownerUserId,
+  accessPermissions,
+  accessEndDate,
+  isActive,
+  status
+) {
   const client = await getClient(ownerUserId); // User-specific operation
   try {
     const result = await client.query(

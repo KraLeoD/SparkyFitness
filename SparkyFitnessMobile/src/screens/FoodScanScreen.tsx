@@ -1,0 +1,285 @@
+import React, { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Platform, Button, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import Toast from 'react-native-toast-message';
+import UIButton from '../components/ui/Button';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from '../components/Icon';
+import SegmentedControl, { type Segment } from '../components/SegmentedControl';
+import type { RootStackScreenProps } from '../types/navigation';
+import type { FoodInfoItem } from '../types/foodInfo';
+import { useCSSVariable } from 'uniwind';
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { lookupBarcode, scanNutritionLabel } from '../services/api/externalFoodSearchApi';
+
+type FoodScanScreenProps = RootStackScreenProps<'FoodScan'>;
+
+const SCAN_SEGMENTS: Segment<'barcode' | 'label'>[] = [
+  { key: 'barcode', label: 'Barcode' },
+  { key: 'label', label: 'Nutrition Label' },
+];
+
+const FoodScanScreen: React.FC<FoodScanScreenProps> = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
+  const accentPrimary = String(useCSSVariable('--color-accent-primary'));
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [flashlight, setFlashlight] = useState(false);
+  const scanLock = useRef(false);
+  const [scanMode, setScanMode] = useState<'barcode' | 'label'>('barcode');
+  const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
+  const [labelProcessing, setLabelProcessing] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<{ base64: string; uri: string } | null>(null);
+  const cameraRef = useRef<CameraView>(null);
+
+  const handleBarcodeScanned = async ({ data }: BarcodeScanningResult) => {
+    if (scanLock.current) return;
+    scanLock.current = true;
+    setScanned(true);
+    setLoading(true);
+
+    try {
+      const result = await lookupBarcode(data);
+
+      if (!result.food) {
+        setNotFoundBarcode(data);
+      } else if (result.food.id) {
+        const dv = result.food.default_variant;
+        const item: FoodInfoItem = {
+          id: result.food.id,
+          name: result.food.name,
+          brand: result.food.brand,
+          servingSize: dv.serving_size,
+          servingUnit: dv.serving_unit,
+          calories: dv.calories,
+          protein: dv.protein,
+          carbs: dv.carbs,
+          fat: dv.fat,
+          fiber: dv.dietary_fiber,
+          saturatedFat: dv.saturated_fat,
+          sodium: dv.sodium,
+          sugars: dv.sugars,
+          variantId: dv.id,
+          source: 'local',
+          originalItem: result.food,
+        };
+        navigation.replace('FoodEntryAdd', { item, date: route.params?.date });
+      } else {
+        const dv = result.food.default_variant;
+        navigation.replace('FoodForm', { mode: 'create-food',
+          date: route.params?.date,
+          barcode: data,
+          providerType: result.source,
+          initialFood: {
+            name: result.food.name,
+            brand: result.food.brand ?? '',
+            servingSize: String(dv.serving_size),
+            servingUnit: dv.serving_unit,
+            calories: String(dv.calories),
+            protein: String(dv.protein),
+            carbs: String(dv.carbs),
+            fat: String(dv.fat),
+            fiber: dv.dietary_fiber != null ? String(dv.dietary_fiber) : '',
+            saturatedFat: dv.saturated_fat != null ? String(dv.saturated_fat) : '',
+            sodium: dv.sodium != null ? String(dv.sodium) : '',
+            sugars: dv.sugars != null ? String(dv.sugars) : '',
+          },
+        });
+      }
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Something went wrong looking up this barcode.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLabelCapture = async () => {
+    if (!cameraRef.current) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      if (!photo?.base64) {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to capture photo.' });
+        return;
+      }
+      setCapturedPhoto({ base64: photo.base64, uri: photo.uri });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to capture photo.' });
+    }
+  };
+
+  const handleUsePhoto = async () => {
+    if (!capturedPhoto) return;
+    setLabelProcessing(true);
+    try {
+      const result = await scanNutritionLabel(capturedPhoto.base64, 'image/jpeg');
+      navigation.replace('FoodForm', { mode: 'create-food',
+        date: route.params?.date,
+        initialFood: {
+          name: result.name || '',
+          brand: result.brand || '',
+          servingSize: String(result.serving_size ?? ''),
+          servingUnit: result.serving_unit || 'g',
+          calories: String(result.calories ?? ''),
+          protein: String(result.protein ?? ''),
+          carbs: String(result.carbs ?? ''),
+          fat: String(result.fat ?? ''),
+          fiber: result.fiber != null ? String(result.fiber) : '',
+          saturatedFat: result.saturated_fat != null ? String(result.saturated_fat) : '',
+          sodium: result.sodium != null ? String(result.sodium) : '',
+          sugars: result.sugars != null ? String(result.sugars) : '',
+        },
+        barcode: notFoundBarcode ?? undefined,
+        providerType: 'label_scan',
+      });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to analyze nutrition label. Please try again.' });
+    } finally {
+      setLabelProcessing(false);
+    }
+  };
+
+  const handleRetake = () => {
+    setCapturedPhoto(null);
+  };
+
+  const handleSegmentChange = (key: 'barcode' | 'label') => {
+    setScanMode(key);
+    setNotFoundBarcode(null);
+    setCapturedPhoto(null);
+    setScanned(false);
+    scanLock.current = false;
+  };
+
+  const handleScanLabel = () => {
+    setScanMode('label');
+    setScanned(false);
+    scanLock.current = false;
+  };
+
+  if (!permission) {
+    return <View />;
+  }
+
+  if (!permission.granted) {
+    return (
+      <View className="flex-1 justify-center items-center px-6" style={Platform.OS === 'android' ? { paddingTop: insets.top } : undefined}>
+        <Text className="text-text-primary text-base text-center mb-4">We need your permission to show the camera</Text>
+        <Button onPress={requestPermission} title="Grant Permission" />
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 flex-col justify-center">
+      <CameraView
+        ref={cameraRef}
+        onBarcodeScanned={scanMode === 'barcode' && !scanned ? handleBarcodeScanned : undefined}
+        barcodeScannerSettings={scanMode === 'barcode' ? {
+          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+        } : undefined}
+        style={StyleSheet.absoluteFillObject}
+        enableTorch={flashlight}
+      />
+
+      {/* Top bar: back button + flashlight */}
+      <View className="absolute left-4 right-4 flex-row justify-between items-center" style={{ top: Platform.OS === 'android' ? insets.top + 8 : 16 }}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          className="bg-black/50 rounded-full p-2"
+        >
+          <Icon name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setFlashlight(!flashlight)}
+          className="bg-black/50 rounded-full p-2"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name={flashlight ? 'flashlight-on' : 'flashlight-off'} size={22} color={flashlight ? accentPrimary : '#fff'} />
+        </TouchableOpacity>
+      </View>
+
+      {(loading || labelProcessing) && (
+        <View className="absolute inset-0 justify-center items-center bg-black/40">
+          <ActivityIndicator size="large" color="#fff" />
+          {labelProcessing && (
+            <Text className="text-white text-base mt-3">Analyzing label...</Text>
+          )}
+        </View>
+      )}
+
+      {scanMode === 'barcode' && notFoundBarcode && !loading && (
+        <View className="absolute bottom-24 left-0 right-0 mx-8 bg-black/70 rounded-xl p-5 items-center gap-3">
+          <Text className="text-white text-base font-semibold">No match for barcode</Text>
+          <Text className="text-white/70 text-sm text-center">You can scan the nutrition label or enter it manually.</Text>
+          <View className="flex-row gap-3 mt-2">
+            <UIButton
+              variant="primary"
+              onPress={handleScanLabel}
+              className="flex-1 py-3 rounded-lg"
+              textClassName="text-sm"
+            >
+              Scan Nutrition Label
+            </UIButton>
+            <TouchableOpacity
+              onPress={() => navigation.replace('FoodForm', { mode: 'create-food',
+                date: route.params?.date,
+                barcode: notFoundBarcode,
+              })}
+              className="flex-1 bg-white/20 py-3 rounded-lg items-center"
+            >
+              <Text className="text-white font-semibold text-sm">Enter Manually</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Photo preview with Retake / Use Photo */}
+      {capturedPhoto && !labelProcessing && (
+        <View className="absolute inset-0">
+          <Image source={{ uri: capturedPhoto.uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+          <View className="absolute bottom-12 left-4 right-4 flex-row gap-3" style={{ paddingBottom: insets.bottom }}>
+            <TouchableOpacity
+              onPress={handleRetake}
+              className="flex-1 bg-white/20 py-4 rounded-lg items-center"
+            >
+              <Text className="text-white font-semibold text-base">Retake</Text>
+            </TouchableOpacity>
+            <UIButton
+              variant="primary"
+              onPress={handleUsePhoto}
+              className="flex-1 py-4 rounded-lg"
+            >
+              Use Photo
+            </UIButton>
+          </View>
+        </View>
+      )}
+
+      {/* Bottom controls: flashlight, segmented control, shutter */}
+      {!capturedPhoto && !labelProcessing && !loading && (
+        <View className="absolute bottom-0 left-0 right-0 items-center gap-4 pb-4" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
+          <View className="bg-black/50 rounded-lg mx-8 self-stretch">
+            <SegmentedControl
+              segments={SCAN_SEGMENTS}
+              activeKey={scanMode}
+              onSelect={handleSegmentChange}
+            />
+          </View>
+
+          {scanMode === 'label' && (
+            <TouchableOpacity
+              onPress={handleLabelCapture}
+              className="w-20 h-20 rounded-full border-4 border-white items-center justify-center"
+              activeOpacity={0.7}
+            >
+              <View className="w-16 h-16 rounded-full bg-white" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+};
+
+export default FoodScanScreen;

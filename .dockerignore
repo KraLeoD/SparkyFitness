@@ -1,4 +1,7 @@
 node_modules
+*/node_modules
+dist
+docker/postgresql
 .git
 .gitignore
 .env
@@ -42,3 +45,9 @@ SparkyFitnessMobile/.expo
 SparkyFitnessServer/uploads/
 SparkyFitnessServer/backup/
 SparkyFitnessServer/temp_uploads/
+
+# Docker Volume
+docker/docker_volume/
+
+# TypeScript
+*.tsbuildinfo

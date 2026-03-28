@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { getSystemClient } = require('../db/poolManager');
 const { log } = require('../config/logging');
+const { grantPermissions } = require('../db/grantPermissions'); // Import grantPermissions
 
 const migrationsDir = path.join(__dirname, '../db/migrations');
 
@@ -9,17 +10,23 @@ async function applyMigrations() {
   const client = await getSystemClient();
   try {
     // The preflightChecks.js script now ensures these variables are set.
-    const appUser = process.env.SPARKY_FITNESS_APP_DB_USER;
+    const appUserRaw = process.env.SPARKY_FITNESS_APP_DB_USER;
+    const appUserQuoted = `"${appUserRaw.replace(/"/g, '""')}"`;
     const appPassword = process.env.SPARKY_FITNESS_APP_DB_PASSWORD;
 
     // Ensure the application role exists
-    const roleExistsResult = await client.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [appUser]);
+    const roleExistsResult = await client.query(
+      'SELECT 1 FROM pg_roles WHERE rolname = $1',
+      [appUserRaw]
+    );
     if (roleExistsResult.rowCount === 0) {
-      log('info', `Creating role: ${appUser}`);
-      await client.query(`CREATE ROLE "${appUser}" WITH LOGIN PASSWORD '${appPassword}'`);
-      log('info', `Successfully created role: ${appUser}`);
+      log('info', `Creating role: ${appUserQuoted}`);
+      await client.query(
+        `CREATE ROLE ${appUserQuoted} WITH LOGIN PASSWORD '${appPassword}'`
+      );
+      log('info', `Successfully created role: ${appUserQuoted}`);
     } else {
-      log('info', `Role ${appUser} already exists.`);
+      log('info', `Role ${appUserQuoted} already exists.`);
     }
 
     // Ensure the schema_migrations table exists
@@ -33,12 +40,17 @@ async function applyMigrations() {
     `);
     log('info', 'Ensured schema_migrations table exists.');
 
-    const appliedMigrationsResult = await client.query('SELECT name FROM system.schema_migrations ORDER BY name');
-    const appliedMigrations = new Set(appliedMigrationsResult.rows.map(row => row.name));
+    const appliedMigrationsResult = await client.query(
+      'SELECT name FROM system.schema_migrations ORDER BY name'
+    );
+    const appliedMigrations = new Set(
+      appliedMigrationsResult.rows.map((row) => row.name)
+    );
     log('info', 'Applied migrations:', Array.from(appliedMigrations));
 
-    const migrationFiles = fs.readdirSync(migrationsDir)
-      .filter(file => file.endsWith('.sql'))
+    const migrationFiles = fs
+      .readdirSync(migrationsDir)
+      .filter((file) => file.endsWith('.sql'))
       .sort();
 
     for (const file of migrationFiles) {
@@ -49,12 +61,18 @@ async function applyMigrations() {
         // The grantPermissions.js script now handles dynamic permission granting.
         // We simply execute the original migration script content.
         await client.query(sql);
-        await client.query('INSERT INTO system.schema_migrations (name) VALUES ($1)', [file]);
+        await client.query(
+          'INSERT INTO system.schema_migrations (name) VALUES ($1)',
+          [file]
+        );
         log('info', `Successfully applied migration: ${file}`);
       } else {
-        log('info', `Migration already applied: ${file}`);
+        //log("info", `Migration already applied: ${file}`);
       }
     }
+    // After all migrations are applied, grant necessary permissions to the app user
+    await grantPermissions();
+    log('info', 'Permissions granted to application user.');
   } catch (error) {
     log('error', 'Error applying migrations:', error);
     process.exit(1); // Exit if migrations fail
@@ -64,5 +82,5 @@ async function applyMigrations() {
 }
 
 module.exports = {
-  applyMigrations
+  applyMigrations,
 };
