@@ -162,14 +162,14 @@ async function performRedirectToLogin() {
 
   setTimeout(() => {
     try {
-      warn(userLoggingLevel, `Navigating to ${navigationUrl} to trigger Authentik intercept`);
+      logging.warn(userLoggingLevel, `Navigating to ${navigationUrl} to trigger Authentik intercept`);
       console.log('SPARKY AUTH: Navigating to', navigationUrl);
 
       // Use window.location.replace for clean navigation (no history entry)
       window.location.replace(navigationUrl);
     } catch (error) {
       // Fallback to href if replace fails
-      warn(userLoggingLevel, 'Replace failed, trying href');
+      logging.warn(userLoggingLevel, 'Replace failed, trying href');
       console.warn('SPARKY AUTH: Replace failed, falling back to href:', error);
       try {
         window.location.href = navigationUrl;
@@ -272,7 +272,7 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
       // Handle authentication errors (401) and authorization errors (403)
       // When session expires or Authentik logs user out, redirect to trigger re-authentication
       if (response.status === 401 || response.status === 403) {
-        warn(userLoggingLevel, `Authentication/Authorization failed for ${endpoint}: ${response.status} ${errorMessage}`);
+        logging.warn(userLoggingLevel, `Authentication/Authorization failed for ${endpoint}: ${response.status} ${errorMessage}`);
 
         // Clear any local storage auth data
         localStorage.removeItem('token');
@@ -314,7 +314,10 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
     logging.debug(userLoggingLevel, `API Call: Received JSON response from ${url}:`, jsonResponse);
     return jsonResponse;
   } catch (err: any) {
-    error(userLoggingLevel, "API call network error:", err);
+    logging.error(userLoggingLevel, "API call network error:", err);
+    
+    // Default error message
+    const errorMessage = err?.message || "An unknown error occurred";
 
     // Network errors can be caused by Authentik proxy redirecting to login page
     // This happens when the session expires and Authentik returns a 302 redirect
@@ -329,7 +332,7 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
       const timeSinceLastRedirect = now - lastRedirectTime;
 
       const detectMessage = `NetworkError detected. Last redirect: ${timeSinceLastRedirect}ms ago. Threshold: 3000ms`;
-      debug(userLoggingLevel, detectMessage);
+      logging.debug(userLoggingLevel, detectMessage);
       console.log('SPARKY AUTH:', detectMessage); // Also log to console for visibility
 
       // Only trigger redirect once, even if multiple API calls fail simultaneously
@@ -338,7 +341,7 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
       if (!isRedirectingToLogin && timeSinceLastRedirect > 3000) {
         isRedirectingToLogin = true;
 
-        warn(userLoggingLevel, `Triggering redirect to login. Last redirect was ${timeSinceLastRedirect}ms ago.`);
+        logging.warn(userLoggingLevel, `Triggering redirect to login. Last redirect was ${timeSinceLastRedirect}ms ago.`);
         console.log('SPARKY AUTH: Triggering immediate redirect');
 
         // Clear any scheduled redirect since we're redirecting now
@@ -354,12 +357,12 @@ export async function apiCall(endpoint: string, options?: ApiCallOptions): Promi
         // Instead, schedule an automatic redirect after the threshold time passes
         const remainingTime = 3000 - timeSinceLastRedirect;
         const skipMessage = `Skipping immediate redirect to prevent loop (last redirect was ${timeSinceLastRedirect}ms ago, threshold is 3000ms)`;
-        warn(userLoggingLevel, skipMessage);
+        logging.warn(userLoggingLevel, skipMessage);
         console.warn('SPARKY AUTH:', skipMessage);
 
         // Schedule automatic redirect after remaining time
         const scheduleMessage = `Scheduling automatic redirect in ${remainingTime}ms`;
-        warn(userLoggingLevel, scheduleMessage);
+        logging.warn(userLoggingLevel, scheduleMessage);
         console.log('SPARKY AUTH:', scheduleMessage);
 
         scheduledRedirectTimeout = setTimeout(() => {
